@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer para enviar IP publica periodicamente a cablestar.giize.com
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Unit=send-public-ip.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

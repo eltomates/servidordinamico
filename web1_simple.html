@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Web1 Simple</title>
+  <style>
+    body { margin: 0; background: #111; color: #eee; font-family: Arial, sans-serif; }
+    .wrap { max-width: 980px; margin: 20px auto; padding: 0 12px; }
+    h1 { font-size: 1.2rem; margin: 0 0 12px; }
+    video { width: 100%; background: #000; }
+    .row { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button { padding: 6px 10px; }
+    .note { color: #bbb; font-size: 0.92rem; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Web1 simple (HLS local)</h1>
+    <video id="player" controls autoplay muted playsinline></video>
+    <div class="row">
+      <button id="reloadBtn" type="button">Recargar</button>
+      <span id="status" class="note"></span>
+    </div>
+    <p class="note">Fuente: /hls/web1/index.m3u8</p>
+  </div>
+
+  <script>
+    const src = '/hls/web1/index.m3u8';
+    const video = document.getElementById('player');
+    const status = document.getElementById('status');
+    let hls = null;
+
+    function load() {
+      status.textContent = 'Cargando...';
+      if (hls) {
+        try { hls.destroy(); } catch (e) {}
+        hls = null;
+      }
+
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src + '?r=' + Date.now();
+        video.load();
+        status.textContent = 'Reproduccion nativa HLS';
+        return;
+      }
+
+      if (window.Hls && Hls.isSupported()) {
+        hls = new Hls({
+          liveSyncDuration: 3,
+          liveMaxLatencyDuration: 12,
+          maxBufferLength: 8,
+          lowLatencyMode: false,
+        });
+        hls.loadSource(src + '?r=' + Date.now());
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          status.textContent = 'Manifest cargado';
+          video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          status.textContent = 'Error HLS: ' + (data?.details || 'desconocido');
+        });
+      } else {
+        status.textContent = 'Este navegador no soporta HLS';
+      }
+    }
+
+    document.getElementById('reloadBtn').addEventListener('click', load);
+    load();
+  </script>
+</body>
+</html>

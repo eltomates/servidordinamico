@@ -1,0 +1,2549 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-store, no-cache, must-revalidate, max-age=0"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>CableStar HDMI en vivo</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f4f4f4;
+        color: #222;
+      }
+
+      header {
+        background: #0b79d0;
+        color: #fff;
+        padding: 16px 20px;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 20px auto;
+        padding: 0 16px 40px;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+      }
+
+      .card h2 {
+        margin-top: 0;
+      }
+
+      .video-wrapper {
+        text-align: center;
+        margin: 16px 0;
+      }
+
+      video,
+      img.stream {
+        width: 100%;
+        max-width: 960px;
+        background: #000;
+      }
+
+      .note {
+        font-size: 0.9rem;
+        color: #555;
+      }
+      .controls {
+        margin: 12px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      button,
+      select {
+        padding: 6px 10px;
+        font-size: 0.95rem;
+      }
+
+      .status {
+        font-size: 0.9rem;
+        color: #555;
+        margin-top: 8px;
+      }
+
+      .alert-banner {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 4px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        border: 1px solid #d0d0d0;
+        background: #f7f7f7;
+        color: #333;
+      }
+
+      .alert-banner.is-ok {
+        background: #e8f5e9;
+        border-color: #2e7d32;
+        color: #1b5e20;
+      }
+
+      .alert-banner.is-error {
+        background: #fdecea;
+        border-color: #b00020;
+        color: #b00020;
+      }
+
+      .channel-health {
+        margin-top: 8px;
+        font-size: 0.92rem;
+        font-weight: 600;
+      }
+
+      .playlist-output {
+        width: 100%;
+        min-height: 220px;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 0.9rem;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fafafa;
+        white-space: pre;
+        overflow: auto;
+      }
+
+      .playlist-result-line {
+        padding: 4px 6px;
+        border-bottom: 1px solid #e0e0e0;
+        cursor: pointer;
+      }
+
+      .playlist-result-line:last-child {
+        border-bottom: none;
+      }
+
+      .playlist-result-line:hover,
+      .playlist-result-line:focus {
+        background: #eef5ff;
+        outline: none;
+      }
+
+      .playlist-result-title {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+
+      .playlist-result-url {
+        font-family: "Courier New", Courier, monospace;
+        font-size: 0.85rem;
+        color: #0b5c1b;
+        word-break: break-all;
+      }
+
+      .playlist-subtitle {
+        margin: 18px 0 6px;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      .playlist-groups {
+        max-height: 240px;
+        overflow-y: auto;
+      }
+
+      .playlist-group-row {
+        padding: 4px 6px;
+        border-bottom: 1px solid #e0e0e0;
+        cursor: pointer;
+      }
+
+      .playlist-group-row:last-child {
+        border-bottom: none;
+      }
+
+      .playlist-group-row:hover,
+      .playlist-group-row:focus {
+        background: #eef5ff;
+        outline: none;
+      }
+
+      .playlist-group-row.is-active {
+        background: #d7ecff;
+        border-left: 4px solid #0b79d0;
+        padding-left: 10px;
+      }
+
+      .playlist-quick-access {
+        margin: 8px 0 4px;
+      }
+
+      .playlist-quick-access-label {
+        display: block;
+        font-weight: 600;
+        color: #0b79d0;
+        margin-bottom: 6px;
+      }
+
+      .playlist-quick-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .playlist-quick-buttons button {
+        background: #e6f2fc;
+        border: 1px solid #b5d7f3;
+        border-radius: 16px;
+        font-size: 0.9rem;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+
+      .playlist-quick-buttons button:hover {
+        background: #d2e9ff;
+      }
+
+      .playlist-custom-access {
+        align-items: stretch;
+      }
+
+      .playlist-custom-access input {
+        flex: 1;
+        min-width: 160px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>CableStar HDMI en vivo</h1>
+    </header>
+
+    <main>
+      <section class="card" style="margin-bottom: 24px">
+        <h2>Control de proxys web</h2>
+        <p class="note">
+          Desde aquí puedes reiniciar de forma remota los proxys
+          <strong>web1&nbsp;–&nbsp;web16</strong> (scripts ffmpeg_web*_proxy.sh).
+        </p>
+        <div class="controls">
+          <button id="restart-web-btn" type="button">
+            Reiniciar canales web1–web16
+          </button>
+          <a href="#web16-card" style="text-decoration: none">
+            <button type="button">Ir a web16</button>
+          </a>
+          <span id="restart-web-status" class="status"></span>
+        </div>
+        <div class="controls" style="margin-top: 8px; flex-wrap: wrap">
+          <select id="update-channel-select">
+            <option value="web1">Canal web 1 (Planet)</option>
+            <option value="web2">Canal web 2 (Filmex Clasico)</option>
+            <option value="web3">Canal web 3 (Cartoon Network)</option>
+            <option value="web4">Canal web 4 (Canela Clasico)</option>
+            <option value="web5">Canal web 5 (Azteca 7)</option>
+            <option value="web6">Canal web 6 (Cine Clasico)</option>
+            <option value="web7">Canal web 7 (Cine Accion)</option>
+            <option value="web8">Canal web 8 (TDN)</option>
+            <option value="web9">Canal web 9 (Canela TV))</option>
+            <option value="web10">Canal web 10 (Cine Adrenalina)</option>
+            <option value="web11">Canal web 11 (Hits Mexicanos)</option>
+            <option value="web12">Canal web 12 (Nickelodeon)</option>
+            <option value="web13">Canal web 13 (TeleFormula)</option>
+            <option value="web14">Canal web 14 (Nick Jr)</option>
+            <option value="web15">Canal web 15 (Azteca Uno)</option>
+            <option value="web16">Canal web 16 (Canela Todo Cine)</option>
+          </select>
+          <input
+            id="update-channel-url"
+            type="text"
+            placeholder="Pega la URL HLS, YouTube o página del canal aquí"
+            style="flex: 1; min-width: 220px"
+          />
+          <button id="update-channel-btn" type="button">
+            Actualizar canal seleccionado
+          </button>
+        </div>
+        <div id="update-channel-status" class="status"></div>
+        <div id="web-monitor-status" class="status"></div>
+        <div id="web67-main-alert" class="alert-banner">Monitor web6/web7: consultando estado...</div>
+      </section>
+
+      <section class="card" style="margin-bottom: 24px">
+        <h2>Inspector de listas M3U</h2>
+        <p class="note">
+          Consulta rápidamente qué canales entrega una URL IPTV remota. Por
+          defecto se usa la lista solicitada para CableStar.
+        </p>
+        <div class="controls" style="flex-wrap: wrap">
+          <input
+            id="playlist-url"
+            type="text"
+            value="http://tv.diablotv.net:8080/get.php?username=avedano1&amp;password=0ee550e405a6&amp;type=m3u_plus"
+            placeholder="Ingresa la URL m3u o déjala por defecto"
+            style="flex: 1; min-width: 260px"
+          />
+          <button id="playlist-fetch-btn" type="button">Mostrar lista</button>
+          <span id="playlist-fetch-status" class="status"></span>
+        </div>
+        <div class="playlist-quick-access">
+          <span class="playlist-quick-access-label">Accesos rápidos para listas recientes</span>
+          <div id="playlist-quick-buttons" class="playlist-quick-buttons">
+            <span class="note">Aquí aparecerán tus accesos guardados.</span>
+          </div>
+        </div>
+        <div class="controls playlist-custom-access" style="flex-wrap: wrap">
+          <input
+            id="playlist-custom-name"
+            type="text"
+            placeholder="Nombre corto (ej. DPlatino)"
+          />
+          <input
+            id="playlist-custom-url"
+            type="text"
+            placeholder="URL m3u para guardar como acceso rápido"
+          />
+          <button id="playlist-save-btn" type="button">Guardar acceso rápido</button>
+          <span id="playlist-preset-status" class="status"></span>
+        </div>
+        <textarea
+          id="playlist-output"
+          class="playlist-output"
+          readonly
+          placeholder="La respuesta de la lista se mostrará aquí"
+        ></textarea>
+        <div class="controls" style="flex-wrap: wrap; margin-top: 12px">
+          <input
+            id="playlist-search-term"
+            type="text"
+            placeholder="Buscar canal, grupo o URL dentro de la lista"
+            style="flex: 1; min-width: 240px"
+          />
+          <button id="playlist-search-btn" type="button">Buscar en lista</button>
+          <span id="playlist-search-status" class="status"></span>
+        </div>
+        <div
+          id="playlist-search-results"
+          class="playlist-output"
+          tabindex="0"
+        >Los resultados (nombre + URL) se mostrarán aquí.</div>
+
+        <div id="playlist-preview-status" class="status" style="margin-top: 12px"></div>
+
+        <h3 class="playlist-subtitle">Vista previa proxificada (HLS local)</h3>
+        <p class="note">
+          Además de la vista previa directa, al hacer clic en una URL también se
+          puede lanzar un <strong>proxy ffmpeg de prueba</strong> que publica la
+          señal como HLS local en <code class="vlc-url" data-path="/hls/preview/index.m3u8"></code>.
+          Úsalo para probar URLs <strong>.ts</strong> u orígenes inestables desde el navegador.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="preview-proxy-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="preview-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="preview-stop-btn" type="button">
+            Detener servicio de vista previa
+          </button>
+        </div>
+
+        <h3 class="playlist-subtitle">Logs de vista previa</h3>
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="preview-log-refresh-btn" type="button">
+            Ver &uacute;ltimos logs
+          </button>
+          <span id="preview-log-status" class="status"></span>
+        </div>
+        <pre
+          id="preview-log-output"
+          class="playlist-output"
+          style="min-height: 80px"
+        >Sin log de vista previa a&uacute;n.</pre>
+
+        <h3 class="playlist-subtitle">Grupos detectados</h3>
+        <p class="note">
+          Haz clic en un grupo para listar únicamente los canales asociados en la
+          tabla de resultados.
+        </p>
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <input
+            id="playlist-group-filter"
+            type="text"
+            placeholder="Filtrar grupos por nombre"
+            style="flex: 1; min-width: 240px"
+          />
+          <button id="playlist-clear-group" type="button">Limpiar selección</button>
+          <span id="playlist-group-status" class="status"></span>
+        </div>
+        <div
+          id="playlist-group-list"
+          class="playlist-output playlist-groups"
+          tabindex="0"
+        >Los grupos aparecerán aquí.</div>
+      </section>
+
+      <section class="card">
+        <h2>HDMI1 directo (capturadora USB 1)</h2>
+        <p>
+          El servidor captura la señal HDMI que llega por la primera
+          capturadora HDMI‑USB y la publica como
+          <strong>HLS con vídeo+audio juntos</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="hdmi1-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <p class="note">
+          Si no ves ni oyes nada, comprueba que el comando ffmpeg HLS de
+          HDMI1 está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver HDMI1 con <strong>vídeo+audio</strong> en VLC, abre esta URL como
+          medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/hdmi1/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>HDMI2 directo (capturadora USB 2)</h2>
+        <p>
+          La segunda capturadora HDMI‑USB se publica también como
+          <strong>HLS con vídeo+audio juntos</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="hdmi2-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <p class="note">
+          Si no ves ni oyes nada, comprueba que el comando ffmpeg HLS de
+          HDMI2 está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver HDMI2 con <strong>vídeo+audio</strong> en VLC, abre esta URL como
+          medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/hdmi2/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>HDMI3 directo (capturadora USB 3)</h2>
+        <p>
+          La tercera entrada HDMI‑USB se publica también como
+          <strong>HLS con vídeo+audio juntos</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="hdmi3-direct-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <p class="note">
+          Si no ves ni oyes nada, comprueba que el comando ffmpeg HLS de
+          HDMI3 está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver HDMI3 con <strong>vídeo+audio</strong> en VLC, abre esta URL
+          como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/hdmi3/index.m3u8"></code>
+        </p>
+      </section>
+
+      
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 1 (Planet)</h2>
+        <p>
+          Este canal utiliza un proxy ffmpeg que toma la URL remota de
+          <strong>Plex Runtime Accion</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache en el mismo puerto 8081.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web1-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web1-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web1-restart-proxy-btn" type="button">
+            Reiniciar proceso web1
+          </button>
+          <span id="web1-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web1_proxy.sh</strong> está en ejecución en el servidor
+          y que la URL remota de Plex responde.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web1/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 2 (Filmex Clasico)</h2>
+        <p>
+          Proxy ffmpeg que toma una URL remota y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web2-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web2-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web2-restart-proxy-btn" type="button">
+            Reiniciar proceso web2
+          </button>
+          <span id="web2-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web2_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web2/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 3 (Cartoon Network)</h2>
+        <p>
+          Este canal utiliza un proxy ffmpeg que toma la URL remota
+          <strong>a0c0</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache en el mismo puerto 8081.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web3-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web3-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web3-restart-proxy-btn" type="button">
+            Reiniciar proceso web3
+          </button>
+          <span id="web3-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web3_proxy.sh</strong> está en ejecución en el servidor
+          y que la URL remota a010 responde.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web3/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 4 (Canela Clasico)</h2>
+        <p>
+          Este canal utiliza un proxy ffmpeg que toma la URL remota de
+          <strong>Canela Clasico</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache en el mismo puerto 8081.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web4-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web4-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web4-restart-proxy-btn" type="button">
+            Reiniciar proceso web4
+          </button>
+          <span id="web4-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web4_proxy.sh</strong> está en ejecución en el servidor
+          y que la URL remota CH7 responde.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web4/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 5 (Azteca 7)</h2>
+        <p>
+          Proxy ffmpeg que toma la URL remota de <strong>Azteca 7</strong> y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web5-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web5-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web5-restart-proxy-btn" type="button">
+            Reiniciar proceso web5
+          </button>
+          <span id="web5-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web5_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web5/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 6 (Cine Clasico)</h2>
+        <p>
+          Proxy ffmpeg que toma la pagina publica de <strong>Pluto TV Cine Clasico</strong> y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web6-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web6-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web6-restart-proxy-btn" type="button">
+            Reiniciar proceso web6
+          </button>
+          <span id="web6-restart-status" class="status"></span>
+        </div>
+        <div id="web6-health-status" class="channel-health">Estado web6: consultando monitor...</div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web6_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web6/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 7 (Cine Accion)</h2>
+        <p>
+          Proxy ffmpeg que toma la página pública de <strong>Pluto TV Cine Accion</strong> y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web7-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web7-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web7-restart-proxy-btn" type="button">
+            Reiniciar proceso web7
+          </button>
+          <span id="web7-restart-status" class="status"></span>
+        </div>
+        <div id="web7-health-status" class="channel-health">Estado web7: consultando monitor...</div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web7_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web7/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 8 (TDN)</h2>
+        <p>
+          Proxy ffmpeg que toma la URL remota de prueba y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web8-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web8-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web8-restart-proxy-btn" type="button">
+            Reiniciar proceso web8
+          </button>
+          <span id="web8-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web8_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web8/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 9 (Canela Tv)</h2>
+        <p>
+          Proxy ffmpeg que toma la URL remota de <strong>Plex Runtime</strong> y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web9-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web9-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web9-restart-proxy-btn" type="button">
+            Reiniciar proceso web9
+          </button>
+          <span id="web9-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web9_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web9/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 10 (Cine Adrenalina)</h2>
+        <p>
+          Proxy ffmpeg que toma la URL remota <strong>Cine Adrenalina</strong> y la
+          publica como <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web10-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web10-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web10-restart-proxy-btn" type="button">
+            Reiniciar proceso web10
+          </button>
+          <span id="web10-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web10_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web10/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 11 (Hits Mexicanos)</h2>
+        <p>
+          Proxy ffmpeg que toma una URL remota IPTV de <strong>Hits Mexicanos</strong> y la
+          publica como <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web11-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web11-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web11-restart-proxy-btn" type="button">
+            Reiniciar proceso web11
+          </button>
+          <span id="web11-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web11_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web11/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 12 (Nickelodeon)</h2>
+        <p>
+          Proxy ffmpeg que toma una URL remota IPTV de
+          <strong>Nickelodeon</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web12-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web12-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web12-restart-proxy-btn" type="button">
+            Reiniciar proceso web12
+          </button>
+          <span id="web12-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web12_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web12/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 13 (TeleFormula)</h2>
+        <p>
+          Proxy ffmpeg que toma la página pública de
+          <strong>TeleFormula</strong>, resuelve el video real con
+          <strong>yt-dlp</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web13-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web13-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web13-restart-proxy-btn" type="button">
+            Reiniciar proceso web13
+          </button>
+          <span id="web13-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web13_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web13/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 14 (Nick Jr)</h2>
+        <p>
+          Proxy ffmpeg que toma la señal pública de
+          <strong>Nick Jr</strong> y la publica como <strong>HLS con vídeo+audio</strong>
+          servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web14-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web14-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web14-restart-proxy-btn" type="button">
+            Reiniciar proceso web14
+          </button>
+          <span id="web14-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web14_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web14/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section class="card" style="margin-top: 24px">
+        <h2>Canal web 15 (Azteca Uno)</h2>
+        <p>
+          Proxy ffmpeg que toma la página pública de
+          <strong>Azteca Uno</strong>, resuelve el video real y la publica como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web15-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web15-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web15-restart-proxy-btn" type="button">
+            Reiniciar proceso web15
+          </button>
+          <span id="web15-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web15_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web15/index.m3u8"></code>
+        </p>
+      </section>
+
+      <section id="web16-card" class="card" style="margin-top: 24px">
+        <h2>Canal web 16 (Canela Todo Cine)</h2>
+        <p>
+          Proxy ffmpeg para la señal de
+          <strong>Canela Todo Cine</strong> publicada como
+          <strong>HLS con vídeo+audio</strong> servido por Apache.
+        </p>
+
+        <div class="video-wrapper">
+          <video
+            id="web16-player"
+            class="stream"
+            controls
+            playsinline
+          ></video>
+        </div>
+
+        <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+          <button id="web16-reload-btn" type="button">
+            Actualizar video (recargar segmentos)
+          </button>
+          <button id="web16-restart-proxy-btn" type="button">
+            Reiniciar proceso web16
+          </button>
+          <span id="web16-restart-status" class="status"></span>
+        </div>
+
+        <p class="note">
+          Si no ves nada, comprueba que el script
+          <strong>ffmpeg_web16_proxy.sh</strong> está en ejecución en el servidor.
+        </p>
+
+        <p class="note">
+          Para ver este canal en VLC, abre esta URL como medio de red:
+          <br />
+          <code class="vlc-url" data-path="/hls/web16/index.m3u8"></code>
+        </p>
+      </section>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+      (function () {
+        const DEFAULT_HLS_PORT = 8081;
+        const DEFAULT_PLAYLIST_URL =
+          "http://tv.diablotv.net:8080/get.php?username=avedano1&password=0ee550e405a6&type=m3u_plus";
+        const DEFAULT_PLAYLIST_PRESETS = [
+          {
+            id: "dplatino",
+            label: "DPlatino (lsotomayor)",
+            url: "http://dplatino.net:80/get.php?username=lsotomayor&password=s1stemas13579&type=m3u_plus",
+          },
+          {
+            id: "diablotv",
+            label: "DiabloTV (avedano1)",
+            url: "http://tv.diablotv.net:8080/get.php?username=avedano1&password=0ee550e405a6&type=m3u_plus",
+          },
+        ];
+        const PLAYLIST_PRESET_STORAGE_KEY = "playlistCustomPresets_v1";
+        const MAX_CUSTOM_PLAYLIST_PRESETS = 12;
+        let publicHost = window.location.hostname;
+        let playlistCache = "";
+        let playlistLineOffsets = [];
+        let playlistOutputEl = null;
+        let playlistLines = [];
+        let playlistEntries = [];
+        let playlistGroupSummary = [];
+        let selectedGroupName = null;
+
+        function getBaseHlsUrl() {
+          return "http://" + publicHost + ":" + DEFAULT_HLS_PORT;
+        }
+
+        function applyVlcUrls() {
+          const base = getBaseHlsUrl();
+          const codes = document.querySelectorAll("code.vlc-url");
+          codes.forEach((el) => {
+            const path = el.getAttribute("data-path");
+            if (!path) return;
+            el.textContent = base + path;
+          });
+        }
+
+        function buildLineOffsets(text) {
+          const offsets = [0];
+          for (let i = 0; i < text.length; i++) {
+            if (text[i] === "\n") {
+              offsets.push(i + 1);
+            }
+          }
+          return offsets;
+        }
+
+        function scrollPlaylistToLine(lineNumber, highlightTerm, absoluteOffset) {
+          if (!playlistOutputEl || !playlistLineOffsets.length) return;
+
+          const clamped = Math.max(1, Math.min(lineNumber || 1, playlistLineOffsets.length));
+          let start = playlistLineOffsets[clamped - 1];
+          let nextOffset =
+            clamped < playlistLineOffsets.length
+              ? playlistLineOffsets[clamped]
+              : playlistCache.length;
+
+          if (typeof absoluteOffset === "number" && !Number.isNaN(absoluteOffset)) {
+            start = Math.max(0, Math.min(absoluteOffset, playlistCache.length));
+            const newlineIndex = playlistCache.indexOf("\n", start);
+            if (newlineIndex >= 0) {
+              nextOffset = newlineIndex + 1;
+            } else {
+              nextOffset = playlistCache.length;
+            }
+          }
+          let selectionStart = start;
+          let selectionEnd = nextOffset;
+          let anchorPosition = start;
+
+          const lineText =
+            playlistLines[clamped - 1] !== undefined
+              ? playlistLines[clamped - 1]
+              : playlistCache.substring(start, nextOffset).replace(/\r$/, "");
+
+          if (lineText) {
+            if (highlightTerm) {
+              const lowerLine = lineText.toLowerCase();
+              const lowerTerm = highlightTerm.toLowerCase();
+              const idx = lowerLine.indexOf(lowerTerm);
+              if (idx >= 0) {
+                anchorPosition = start + idx;
+              }
+            }
+            selectionEnd = start + lineText.length;
+          }
+          selectionEnd = Math.max(selectionEnd, selectionStart);
+
+          try {
+            if (typeof playlistOutputEl.focus === "function") {
+              try {
+                playlistOutputEl.focus({ preventScroll: true });
+              } catch (focusErr) {
+                playlistOutputEl.focus();
+              }
+            }
+            if (typeof playlistOutputEl.setSelectionRange === "function") {
+              playlistOutputEl.setSelectionRange(selectionStart, selectionEnd);
+            }
+
+            const totalChars = Math.max(1, playlistCache.length);
+            const progress = anchorPosition / totalChars;
+            const scrollPosition = progress * playlistOutputEl.scrollHeight;
+            playlistOutputEl.scrollTop = Math.max(
+              scrollPosition - playlistOutputEl.clientHeight / 2,
+              0
+            );
+          } catch (err) {
+            console.warn("No se pudo seleccionar la línea de la playlist", err);
+          }
+        }
+
+        function extractPlaylistEntries(lines, offsets) {
+          if (!Array.isArray(lines)) return [];
+          const entries = [];
+
+          for (let i = 0; i < lines.length; i++) {
+            const rawLine = lines[i] || "";
+            const trimmed = rawLine.trim();
+            if (!trimmed.startsWith("#EXTINF")) {
+              continue;
+            }
+
+            let urlLine = "";
+            let urlLineNumber = i + 2;
+            if (i + 1 < lines.length) {
+              urlLine = (lines[i + 1] || "").trim();
+            }
+
+            const lineOffset = Array.isArray(offsets) && offsets[i] !== undefined
+              ? offsets[i]
+              : null;
+
+            const groupMatch = trimmed.match(/group-title="([^"]*)"/i);
+            const groupTitle = groupMatch && groupMatch[1]
+              ? groupMatch[1].trim() || "Sin grupo"
+              : "Sin grupo";
+
+            const titlePart = rawLine.includes(",")
+              ? rawLine.substring(rawLine.indexOf(",") + 1).trim()
+              : trimmed;
+
+            entries.push({
+              groupTitle,
+              title: titlePart || "(sin nombre)",
+              infoLineNumber: i + 1,
+              urlLineNumber,
+              url: urlLine,
+              infoOffset: lineOffset,
+            });
+          }
+
+          return entries;
+        }
+
+        function summarizeGroups(entries) {
+          if (!Array.isArray(entries) || !entries.length) return [];
+
+          const map = new Map();
+          entries.forEach((entry, idx) => {
+            const key = entry.groupTitle || "Sin grupo";
+            if (!map.has(key)) {
+              map.set(key, { name: key, count: 0, entryIndices: [] });
+            }
+            const bucket = map.get(key);
+            bucket.count += 1;
+            bucket.entryIndices.push(idx);
+          });
+
+          return Array.from(map.values()).sort((a, b) => {
+            return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+          });
+        }
+
+        const hlsConfig = {
+          // Más colchón de buffer para reducir cortes
+          liveSyncDuration: 6,
+          liveMaxLatencyDuration: 30,
+          maxLiveSyncPlaybackRate: 1.0,
+          maxBufferLength: 20,
+          maxBufferHole: 2,
+          lowLatencyMode: false,
+        };
+
+        const hlsPlayers = {};
+
+        let previewVideoEl = null;
+        let previewStatusEl = null;
+        let previewHlsInstance = null;
+        let previewLogOutputEl = null;
+        let previewLogStatusEl = null;
+
+        function initPlaylistPreviewElements() {
+          previewVideoEl = null;
+          previewStatusEl = document.getElementById("playlist-preview-status");
+          previewLogOutputEl = document.getElementById("preview-log-output");
+          previewLogStatusEl = document.getElementById("preview-log-status");
+        }
+
+        function setPreviewStatus(text, isError) {
+          if (!previewStatusEl) return;
+          previewStatusEl.textContent = text || "";
+          previewStatusEl.style.color = isError ? "#b00020" : "#555";
+        }
+
+        function setPreviewLogStatus(text, isError) {
+          if (!previewLogStatusEl) return;
+          previewLogStatusEl.textContent = text || "";
+          previewLogStatusEl.style.color = isError ? "#b00020" : "#555";
+        }
+
+        function fetchPreviewLog(options) {
+          if (!previewLogOutputEl) return;
+
+          const opts = options || {};
+          const qs = "lines=15&ts=" + Date.now();
+
+          if (!opts.silent) {
+            setPreviewLogStatus("Leyendo &uacute;ltimas l&iacute;neas del log...", false);
+          }
+
+          fetch("/scripts/get_preview_log.sh?" + qs, { cache: "no-store" })
+            .then((res) => res.text())
+            .then((text) => {
+              const content = text && text.trim() ? text : "Sin log de vista previa a&uacute;n.";
+              previewLogOutputEl.textContent = content;
+              setPreviewLogStatus("Mostrando &uacute;ltimas 15 l&iacute;neas del log.", false);
+            })
+            .catch(() => {
+              setPreviewLogStatus("No se pudieron leer los logs.", true);
+            });
+        }
+
+        function startPreviewProxy(rawUrl) {
+          const url = (rawUrl || "").trim();
+          if (!url) {
+            setPreviewStatus("URL vacía, no se puede proxificar.", true);
+            return;
+          }
+
+          setPreviewStatus(
+            "Iniciando proxy HLS local para la URL seleccionada...",
+            false
+          );
+
+          const qs =
+            "url=" + encodeURIComponent(url) +
+            "&ts=" + Date.now();
+
+          fetch("/scripts/update_preview_channel.sh?" + qs, { cache: "no-store" })
+            .then((res) => res.text())
+            .then((text) => {
+              const msg = text && text.trim() ? text.trim() : "Vista previa proxificada actualizada.";
+              const isError = msg.startsWith("ERROR") || msg.startsWith("AVISO");
+              setPreviewStatus(msg, isError);
+              // Tras actualizar el proxy, refrescamos los logs para ver qu&eacute; pas&oacute;.
+              fetchPreviewLog({ silent: true });
+            })
+            .catch(() => {
+              setPreviewStatus("Error al iniciar el proxy de vista previa.", true);
+            });
+        }
+
+        function playPreviewUrl(rawUrl) {
+          const url = (rawUrl || "").trim();
+          if (!previewVideoEl || !url) {
+            setPreviewStatus("No hay URL válida para reproducir.", true);
+            return;
+          }
+
+          try {
+            if (previewHlsInstance) {
+              try {
+                previewHlsInstance.destroy();
+              } catch (e) {}
+              previewHlsInstance = null;
+            }
+
+            previewVideoEl.pause();
+            previewVideoEl.removeAttribute("src");
+            previewVideoEl.load();
+
+            const lowerUrl = url.toLowerCase();
+
+            if (
+              lowerUrl.endsWith(".m3u8") &&
+              window.Hls &&
+              window.Hls.isSupported()
+            ) {
+              const hls = new Hls(hlsConfig);
+              previewHlsInstance = hls;
+              hls.loadSource(url);
+              hls.attachMedia(previewVideoEl);
+              hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                previewVideoEl
+                  .play()
+                  .catch(() => {});
+              });
+            } else {
+              previewVideoEl.src = url;
+              previewVideoEl.load();
+              previewVideoEl
+                .play()
+                .catch(() => {});
+            }
+
+            setPreviewStatus("Reproduciendo vista previa: " + url, false);
+          } catch (err) {
+            console.warn("No se pudo iniciar la vista previa del canal", err);
+            setPreviewStatus("Error al intentar reproducir la URL.", true);
+          }
+        }
+
+        function handlePlaylistUrlClick(rawUrl) {
+          const url = (rawUrl || "").trim();
+          if (!url) {
+            setPreviewStatus("URL vacía, no se puede reproducir.", true);
+            return;
+          }
+
+          // Lanzar el proxy de vista previa HLS local (único reproductor).
+          startPreviewProxy(url);
+
+          // Además copiamos la URL al formulario de "Actualizar canal"
+          // por si quieres usar un proxy ffmpeg webX.
+          const chInput = document.getElementById("update-channel-url");
+          if (chInput) {
+            chInput.value = url;
+          }
+
+          setPreviewStatus(
+            "Intentando reproducir la URL seleccionada. " +
+              "También se copió al campo 'Actualizar canal seleccionado' por si quieres usar un proxy webX.",
+            false
+          );
+        }
+
+        function setupHlsPlayer(videoId, src, fallbackPath, options) {
+          const opts = options || {};
+          const autoRestart = !!opts.autoRestart;
+          const autoPlayMuted = !!opts.autoPlayMuted;
+          const hlsOverrides = opts.hlsOverrides || {};
+
+          const video = document.getElementById(videoId);
+          if (!video) return;
+
+          if (autoPlayMuted) {
+            video.muted = true;
+            video.setAttribute("muted", "");
+            video.setAttribute("autoplay", "");
+          }
+
+          if (video.canPlayType("application/vnd.apple.mpegurl")) {
+            // Soporte nativo HLS (Safari, etc.)
+            video.src = src;
+            video.load();
+            if (autoPlayMuted) {
+              video.play().catch(() => {});
+            }
+
+            hlsPlayers[videoId] = {
+              restart: () => {
+                try {
+                  video.pause();
+                } catch (e) {}
+                const cacheBuster = (src.indexOf("?") === -1 ? "?" : "&") + "r=" + Date.now();
+                video.src = src + cacheBuster;
+                video.load();
+              },
+            };
+          } else if (window.Hls && window.Hls.isSupported()) {
+            let hls = new Hls(Object.assign({}, hlsConfig, hlsOverrides));
+            hls.loadSource(src);
+            hls.attachMedia(video);
+
+            if (autoPlayMuted) {
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(() => {});
+              });
+            }
+
+            const restart = () => {
+              try {
+                video.pause();
+              } catch (e) {}
+              try {
+                hls.destroy();
+              } catch (e) {}
+              hls = new Hls(Object.assign({}, hlsConfig, hlsOverrides));
+              const cacheBuster = (src.indexOf("?") === -1 ? "?" : "&") + "r=" + Date.now();
+              hls.loadSource(src + cacheBuster);
+              hls.attachMedia(video);
+            };
+
+            hlsPlayers[videoId] = { restart };
+
+            if (autoRestart) {
+
+              // Si el video llega a su fin (por ENDLIST), reiniciamos el HLS.
+              video.addEventListener("ended", () => {
+                restart();
+              });
+
+              // En caso de error fatal de Hls.js, también reiniciamos.
+              hls.on(Hls.Events.ERROR, function (event, data) {
+                if (data && data.fatal) {
+                  restart();
+                }
+              });
+            }
+          } else {
+            video.outerHTML =
+              '<p class="note">Este navegador no soporta HLS. Usa VLC con la URL: <code>' +
+              getBaseHlsUrl() + (fallbackPath || src) +
+              "</code></p>";
+          }
+        }
+
+        function restartHlsPlayer(videoId) {
+          const entry = hlsPlayers[videoId];
+          if (!entry || typeof entry.restart !== "function") return;
+          try {
+            entry.restart();
+          } catch (e) {
+            console.warn("No se pudo reiniciar el reproductor HLS", videoId, e);
+          }
+        }
+
+        function attachPlaylistInspector() {
+          const input = document.getElementById("playlist-url");
+          const btn = document.getElementById("playlist-fetch-btn");
+          const statusEl = document.getElementById("playlist-fetch-status");
+          const output = document.getElementById("playlist-output");
+          const searchInput = document.getElementById("playlist-search-term");
+          const searchBtn = document.getElementById("playlist-search-btn");
+          const searchStatusEl = document.getElementById("playlist-search-status");
+          const searchOutput = document.getElementById("playlist-search-results");
+          const groupListEl = document.getElementById("playlist-group-list");
+          const groupFilterInput = document.getElementById("playlist-group-filter");
+          const groupClearBtn = document.getElementById("playlist-clear-group");
+          const groupStatusEl = document.getElementById("playlist-group-status");
+          const previewLogRefreshBtn = document.getElementById("preview-log-refresh-btn");
+          const previewReloadBtn = document.getElementById("preview-reload-btn");
+          const previewStopBtn = document.getElementById("preview-stop-btn");
+          const presetButtonsEl = document.getElementById("playlist-quick-buttons");
+          const presetNameInput = document.getElementById("playlist-custom-name");
+          const presetUrlInput = document.getElementById("playlist-custom-url");
+          const presetSaveBtn = document.getElementById("playlist-save-btn");
+          const presetStatusEl = document.getElementById("playlist-preset-status");
+
+          if (
+            !input ||
+            !btn ||
+            !statusEl ||
+            !output ||
+            !searchInput ||
+            !searchBtn ||
+            !searchStatusEl ||
+            !searchOutput ||
+            !groupListEl ||
+            !groupFilterInput ||
+            !groupClearBtn ||
+            !groupStatusEl
+          ) {
+            return;
+          }
+
+          initPlaylistPreviewElements();
+
+          playlistOutputEl = output;
+
+          const setStatus = (text, isError) => {
+            statusEl.textContent = text;
+            statusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          const setSearchStatus = (text, isError) => {
+            searchStatusEl.textContent = text;
+            searchStatusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          const setGroupStatus = (text, isError) => {
+            groupStatusEl.textContent = text;
+            groupStatusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          const setPresetStatus = (text, isError) => {
+            if (!presetStatusEl) return;
+            presetStatusEl.textContent = text || "";
+            presetStatusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          let customPlaylistPresets = [];
+          const presetsSupportLocalStorage = (() => {
+            try {
+              const testKey = "__playlist_presets_test__";
+              window.localStorage.setItem(testKey, "1");
+              window.localStorage.removeItem(testKey);
+              return true;
+            } catch (err) {
+              return false;
+            }
+          })();
+
+          const loadCustomPresets = () => {
+            if (!presetsSupportLocalStorage) {
+              customPlaylistPresets = [];
+              return;
+            }
+            try {
+              const raw = window.localStorage.getItem(PLAYLIST_PRESET_STORAGE_KEY);
+              const parsed = raw ? JSON.parse(raw) : [];
+              customPlaylistPresets = Array.isArray(parsed)
+                ? parsed.filter((item) => item && item.label && item.url)
+                : [];
+            } catch (err) {
+              customPlaylistPresets = [];
+            }
+          };
+
+          const saveCustomPresets = () => {
+            if (!presetsSupportLocalStorage) return;
+            try {
+              window.localStorage.setItem(
+                PLAYLIST_PRESET_STORAGE_KEY,
+                JSON.stringify(customPlaylistPresets.slice(0, MAX_CUSTOM_PLAYLIST_PRESETS))
+              );
+            } catch (err) {}
+          };
+
+          const getAllPresets = () => {
+            return DEFAULT_PLAYLIST_PRESETS.concat(customPlaylistPresets);
+          };
+
+          const renderPresetButtons = () => {
+            if (!presetButtonsEl) return;
+            const presets = getAllPresets();
+            presetButtonsEl.innerHTML = "";
+            if (!presets.length) {
+              const span = document.createElement("span");
+              span.className = "note";
+              span.textContent = "Sin accesos rápidos configurados.";
+              presetButtonsEl.appendChild(span);
+              return;
+            }
+
+            const frag = document.createDocumentFragment();
+            presets.forEach((preset) => {
+              const presetBtn = document.createElement("button");
+              presetBtn.type = "button";
+              presetBtn.textContent = preset.label || preset.url;
+              presetBtn.addEventListener("click", () => {
+                if (input) {
+                  input.value = preset.url;
+                  setStatus(
+                    "URL cargada desde accesos rápidos: " + (preset.label || preset.url),
+                    false
+                  );
+                }
+              });
+              frag.appendChild(presetBtn);
+            });
+
+            presetButtonsEl.appendChild(frag);
+          };
+
+          loadCustomPresets();
+          renderPresetButtons();
+
+          if (presetSaveBtn && presetNameInput && presetUrlInput) {
+            presetSaveBtn.addEventListener("click", () => {
+              const label = (presetNameInput.value || "").trim();
+              const url = (presetUrlInput.value || "").trim();
+
+              if (!label || !url) {
+                setPresetStatus("Ingresa un nombre y una URL para guardarla.", true);
+                return;
+              }
+
+              if (!/^https?:\/\//i.test(url)) {
+                setPresetStatus("La URL debe iniciar con http:// o https://", true);
+                return;
+              }
+
+              const newPreset = {
+                id: "custom-" + Date.now(),
+                label,
+                url,
+              };
+
+              customPlaylistPresets = [newPreset]
+                .concat(
+                  customPlaylistPresets.filter((preset) => preset.url !== newPreset.url)
+                )
+                .slice(0, MAX_CUSTOM_PLAYLIST_PRESETS);
+
+              saveCustomPresets();
+              renderPresetButtons();
+
+              if (input) {
+                input.value = url;
+              }
+
+              presetNameInput.value = "";
+              presetUrlInput.value = "";
+              setPresetStatus("Acceso rápido guardado solo en este navegador.", false);
+            });
+          }
+
+          if (previewLogRefreshBtn) {
+            previewLogRefreshBtn.addEventListener("click", () => {
+              fetchPreviewLog({ silent: false });
+            });
+          }
+
+          if (previewReloadBtn) {
+            previewReloadBtn.addEventListener("click", () => {
+              restartHlsPlayer("preview-proxy-player");
+            });
+          }
+
+          if (previewStopBtn) {
+            previewStopBtn.addEventListener("click", () => {
+              setPreviewStatus("Deteniendo servicio de vista previa...", false);
+              fetch("/scripts/stop_preview_channel.sh?ts=" + Date.now(), { cache: "no-store" })
+                .then((res) => res.text())
+                .then((text) => {
+                  const msg = text && text.trim() ? text.trim() : "Vista previa detenida.";
+                  const isError = msg.startsWith("ERROR") || msg.startsWith("AVISO");
+                  setPreviewStatus(msg, isError);
+                  fetchPreviewLog({ silent: true });
+                })
+                .catch(() => {
+                  setPreviewStatus("No se pudo detener el servicio de vista previa.", true);
+                });
+            });
+          }
+
+          const clearSearchOutput = () => {
+            searchOutput.textContent = "Los resultados (nombre + URL) se mostrarán aquí.";
+          };
+
+            const renderSearchResults = (items) => {
+            searchOutput.innerHTML = "";
+            if (!items || !items.length) {
+              clearSearchOutput();
+              return;
+            }
+
+            const frag = document.createDocumentFragment();
+            items.forEach((entry) => {
+              const row = document.createElement("div");
+              row.className = "playlist-result-line";
+                const titleEl = document.createElement("div");
+                titleEl.className = "playlist-result-title";
+                titleEl.textContent = entry.title || entry.text || "(sin nombre)";
+
+                const urlEl = document.createElement("div");
+                urlEl.className = "playlist-result-url";
+                urlEl.textContent = entry.url || entry.text || "(sin URL)";
+
+                const clickToPreview = () => {
+                  const candidate = entry.url || entry.text || "";
+                  handlePlaylistUrlClick(candidate);
+                };
+
+                row.addEventListener("click", clickToPreview);
+                row.addEventListener("keypress", (ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    clickToPreview();
+                  }
+                });
+
+                row.appendChild(titleEl);
+                row.appendChild(urlEl);
+              frag.appendChild(row);
+            });
+
+            searchOutput.appendChild(frag);
+            searchOutput.scrollTop = 0;
+          };
+
+          const renderGroupList = () => {
+            groupListEl.innerHTML = "";
+
+            if (!playlistGroupSummary.length) {
+              groupListEl.textContent = "Carga una lista para ver sus grupos.";
+              return;
+            }
+
+            const filterTerm = (groupFilterInput.value || "").trim().toLowerCase();
+            const filtered = playlistGroupSummary.filter((group) =>
+              group.name.toLowerCase().includes(filterTerm)
+            );
+
+            if (!filtered.length) {
+              groupListEl.textContent = "Sin grupos que coincidan con el filtro.";
+              return;
+            }
+
+            const frag = document.createDocumentFragment();
+            filtered.forEach((group) => {
+              const row = document.createElement("div");
+              row.className =
+                "playlist-group-row" + (group.name === selectedGroupName ? " is-active" : "");
+              row.tabIndex = 0;
+              row.dataset.groupName = group.name;
+              row.textContent = group.name + " (" + group.count + ")";
+
+              const activate = () => {
+                selectedGroupName = group.name;
+                renderGroupList();
+                displayGroupChannels(group.name);
+              };
+
+              row.addEventListener("click", activate);
+              row.addEventListener("keypress", (ev) => {
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault();
+                  activate();
+                }
+              });
+
+              frag.appendChild(row);
+            });
+
+            groupListEl.appendChild(frag);
+          };
+
+          const displayGroupChannels = (groupName) => {
+            if (!playlistGroupSummary.length) {
+              setGroupStatus("Carga una lista antes de seleccionar un grupo.", true);
+              return;
+            }
+
+            const bucket = playlistGroupSummary.find((group) => group.name === groupName);
+            if (!bucket) {
+              setGroupStatus("Grupo no encontrado.", true);
+              return;
+            }
+
+            const items = bucket.entryIndices.map((idx) => ({
+              title: playlistEntries[idx].title,
+              url: playlistEntries[idx].url,
+            }));
+
+            renderSearchResults(items);
+            setSearchStatus(
+              "Coincidencias: " + items.length + " en \"" + groupName + "\".",
+              false
+            );
+            setGroupStatus("Grupo seleccionado: " + groupName + ".", false);
+          };
+
+          const clearGroupSelection = (options) => {
+            const opts = options || {};
+            if (opts.resetFilter && groupFilterInput) {
+              groupFilterInput.value = "";
+            }
+            selectedGroupName = null;
+            renderGroupList();
+            if (!opts.silent) {
+              setGroupStatus("Selección de grupo limpiada.", false);
+            }
+          };
+
+          const requestList = () => {
+            let target = (input.value || "").trim();
+            if (!target) {
+              target = DEFAULT_PLAYLIST_URL;
+              input.value = target;
+            }
+
+            btn.disabled = true;
+            output.value = "";
+            setStatus("Consultando lista remota...", false);
+
+            const qs =
+              "target=" + encodeURIComponent(target) +
+              "&ts=" + Date.now();
+
+            fetch("/scripts/get_playlist_preview.sh?" + qs, { cache: "no-store" })
+              .then((res) => {
+                if (!res.ok) {
+                  throw new Error("bad status" + res.status);
+                }
+                return res.text();
+              })
+              .then((text) => {
+                const content = text && text.length ? text : "La respuesta llegó vacía.";
+                output.value = content;
+                playlistCache = content;
+                playlistLineOffsets = buildLineOffsets(content);
+                playlistLines = content.split(/\r?\n/);
+                playlistEntries = extractPlaylistEntries(playlistLines, playlistLineOffsets);
+                playlistGroupSummary = summarizeGroups(playlistEntries);
+                clearGroupSelection({ resetFilter: true, silent: true });
+                if (playlistGroupSummary.length) {
+                  setGroupStatus("Grupos detectados: " + playlistGroupSummary.length + ".", false);
+                } else {
+                  setGroupStatus("La lista no publica group-title.", true);
+                }
+                clearSearchOutput();
+                setSearchStatus("Lista lista para buscar.", false);
+                setStatus("Lista obtenida correctamente.", false);
+              })
+              .catch(() => {
+                setStatus("Error al consultar la lista remota.", true);
+              })
+              .finally(() => {
+                btn.disabled = false;
+              });
+          };
+
+          const runSearch = () => {
+            const term = (searchInput.value || "").trim();
+
+            if (!playlistCache) {
+              setSearchStatus("Primero obtén la lista con el botón anterior.", true);
+              return;
+            }
+
+            if (!term) {
+              setSearchStatus("Ingresa un texto a buscar.", true);
+              clearSearchOutput();
+              return;
+            }
+
+            if (selectedGroupName) {
+              selectedGroupName = null;
+              renderGroupList();
+              setGroupStatus("Sin grupo seleccionado (búsqueda manual).", false);
+            }
+
+            const lower = term.toLowerCase();
+            const lines = playlistLines.length ? playlistLines : playlistCache.split(/\r?\n/);
+            const matches = [];
+
+            if (playlistEntries.length) {
+              playlistEntries.forEach((entry) => {
+                const haystack = (entry.title + " " + entry.groupTitle + " " + (entry.url || "")).toLowerCase();
+                if (haystack.includes(lower)) {
+                  matches.push({
+                    title: entry.title,
+                    url: entry.url,
+                  });
+                }
+              });
+            } else {
+              lines.forEach((line) => {
+                if (line.toLowerCase().includes(lower)) {
+                  matches.push({ title: line, url: line });
+                }
+              });
+            }
+
+            if (!matches.length) {
+              clearSearchOutput();
+              setSearchStatus("Sin coincidencias para \"" + term + "\".", true);
+              return;
+            }
+
+            const MAX_MATCHES = 200;
+            const shownMatches = matches.slice(0, MAX_MATCHES);
+            renderSearchResults(shownMatches);
+            if (matches.length > MAX_MATCHES) {
+              setSearchStatus(
+                "Coincidencias: " + matches.length + " (mostrando las primeras " + MAX_MATCHES + ")",
+                false
+              );
+            } else {
+              setSearchStatus("Coincidencias: " + matches.length + ".", false);
+            }
+          };
+
+          btn.addEventListener("click", requestList);
+          searchBtn.addEventListener("click", runSearch);
+          searchInput.addEventListener("keyup", (ev) => {
+            if (ev.key === "Enter") {
+              runSearch();
+            }
+          });
+
+          groupFilterInput.addEventListener("input", () => {
+            renderGroupList();
+          });
+
+          groupClearBtn.addEventListener("click", () => {
+            clearGroupSelection({ resetFilter: true, silent: false });
+            clearSearchOutput();
+          });
+
+          clearSearchOutput();
+          renderGroupList();
+          setGroupStatus("Carga una lista para ver sus grupos.", false);
+        }
+
+        setupHlsPlayer(
+          "hdmi1-player",
+          "/hls/hdmi1/index.m3u8",
+          "/hls/hdmi1/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "hdmi2-player",
+          "/hls/hdmi2/index.m3u8",
+          "/hls/hdmi2/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "hdmi3-direct-player",
+          "/hls/hdmi3/index.m3u8",
+          "/hls/hdmi3/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web1-player",
+          "/hls/web1/index.m3u8",
+          "/hls/web1/index.m3u8",
+          {
+            autoPlayMuted: true,
+            hlsOverrides: {
+              liveSyncDuration: 3,
+              liveMaxLatencyDuration: 12,
+              maxBufferLength: 8,
+              maxBufferHole: 1,
+            },
+          }
+        );
+
+        setupHlsPlayer(
+          "preview-proxy-player",
+          "/hls/preview/index.m3u8",
+          "/hls/preview/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web2-player",
+          "/hls/web2/index.m3u8",
+          "/hls/web2/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web3-player",
+          "/hls/web3/index.m3u8",
+          "/hls/web3/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web4-player",
+          "/hls/web4/index.m3u8",
+          "/hls/web4/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web5-player",
+          "/hls/web5/index.m3u8",
+          "/hls/web5/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web6-player",
+          "/hls/web6/index.m3u8",
+          "/hls/web6/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web7-player",
+          "/hls/web7/index.m3u8",
+          "/hls/web7/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web8-player",
+          "/hls/web8/index.m3u8",
+          "/hls/web8/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web9-player",
+          "/hls/web9/index.m3u8",
+          "/hls/web9/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web10-player",
+          "/hls/web10/index.m3u8",
+          "/hls/web10/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web11-player",
+          "/hls/web11/index.m3u8",
+          "/hls/web11/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web12-player",
+          "/hls/web12/index.m3u8",
+          "/hls/web12/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web13-player",
+          "/hls/web13/index.m3u8",
+          "/hls/web13/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web14-player",
+          "/hls/web14/index.m3u8",
+          "/hls/web14/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web15-player",
+          "/hls/web15/index.m3u8",
+          "/hls/web15/index.m3u8"
+        );
+
+        setupHlsPlayer(
+          "web16-player",
+          "/hls/web16/index.m3u8",
+          "/hls/web16/index.m3u8"
+        );
+
+        function attachRestartHandler() {
+          const btn = document.getElementById("restart-web-btn");
+          const statusEl = document.getElementById("restart-web-status");
+          if (!btn || !statusEl) return;
+
+          const setStatus = (text, isError) => {
+            statusEl.textContent = text;
+            statusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          btn.addEventListener("click", () => {
+            setStatus("Reiniciando proxys web1–web16...", false);
+            btn.disabled = true;
+
+            fetch("/scripts/restart_web_proxies.sh", { cache: "no-store" })
+              .then((res) => res.text())
+              .then((text) => {
+                const msg = text && text.trim() ? text.trim() : "Reinicio ejecutado.";
+                setStatus(msg, false);
+              })
+              .catch(() => {
+                setStatus("Error al intentar reiniciar los proxys.", true);
+              })
+              .finally(() => {
+                btn.disabled = false;
+              });
+          });
+        }
+
+        function attachChannelUpdateHandler() {
+          const select = document.getElementById("update-channel-select");
+          const input = document.getElementById("update-channel-url");
+          const btn = document.getElementById("update-channel-btn");
+          const statusEl = document.getElementById("update-channel-status");
+
+          if (!select || !input || !btn || !statusEl) return;
+
+          let channelMap = null;
+          let channelMapPromise = null;
+
+          // Keep a cached copy of saved URLs so the field can auto-fill per channel.
+          const loadChannelMap = () => {
+            if (channelMap) {
+              return Promise.resolve(channelMap);
+            }
+            if (channelMapPromise) {
+              return channelMapPromise;
+            }
+
+            channelMapPromise = fetch(
+              "/scripts/get_web_channel_urls.sh?ts=" + Date.now(),
+              { cache: "no-store" }
+            )
+              .then((res) => {
+                if (!res.ok) {
+                  throw new Error("status " + res.status);
+                }
+                return res.json();
+              })
+              .then((data) => {
+                channelMapPromise = null;
+                if (data && typeof data === "object") {
+                  channelMap = data;
+                  return channelMap;
+                }
+                return null;
+              })
+              .catch(() => {
+                channelMapPromise = null;
+                return null;
+              });
+
+            return channelMapPromise;
+          };
+
+          const applyChannelUrl = (ch) => {
+            loadChannelMap().then((map) => {
+              if (map && typeof map[ch] === "string" && map[ch]) {
+                input.value = map[ch];
+              } else {
+                input.value = "";
+              }
+            });
+          };
+
+          const setStatus = (text, isError) => {
+            statusEl.textContent = text;
+            statusEl.style.color = isError ? "#b00020" : "#555";
+          };
+
+          const waitForChannelHealthy = (ch, url, remainingChecks) => {
+            const checksLeft = typeof remainingChecks === "number" ? remainingChecks : 12; // ~1 min con intervalo de 5s
+            if (checksLeft <= 0) {
+              setStatus(
+                "AVISO: " +
+                  ch +
+                  " actualizado, pero el monitor no confirma que esté generando segmentos. URL: " + url,
+                true
+              );
+              return;
+            }
+
+            fetch("/logs/web_status.json?ts=" + Date.now(), { cache: "no-store" })
+              .then((res) => {
+                if (!res.ok) throw new Error("status " + res.status);
+                return res.json();
+              })
+              .then((data) => {
+                if (!data || !Array.isArray(data.channels_not_updating)) {
+                  setStatus(
+                    "OK: " + ch + " actualizado (el monitor aún no tiene datos). URL: " + url,
+                    false
+                  );
+                  return;
+                }
+
+                const notUpdating = data.channels_not_updating || [];
+                if (!notUpdating.includes(ch)) {
+                  setStatus(
+                    "OK: " +
+                      ch +
+                      " actualizado y funcionando según el monitor. URL: " + url,
+                    false
+                  );
+                } else {
+                  setStatus(
+                    "Canal " +
+                      ch +
+                      " actualizado; esperando a que el monitor confirme... URL: " + url,
+                    false
+                  );
+                  setTimeout(() => waitForChannelHealthy(ch, url, checksLeft - 1), 5000);
+                }
+              })
+              .catch(() => {
+                setStatus(
+                  "OK: " + ch + " actualizado (no se pudo consultar el monitor). URL: " + url,
+                  false
+                );
+              });
+          };
+
+          select.addEventListener("change", () => {
+            applyChannelUrl(select.value);
+          });
+
+          btn.addEventListener("click", () => {
+            const ch = select.value;
+            const url = (input.value || "").trim();
+
+            if (!url) {
+              setStatus("Por favor, ingresa una URL.", true);
+              return;
+            }
+
+            btn.disabled = true;
+            setStatus("Actualizando " + ch + "...", false);
+
+            const qs =
+              "ch=" + encodeURIComponent(ch) +
+              "&url=" + encodeURIComponent(url);
+
+            fetch("/scripts/update_web_channel.sh?" + qs, { cache: "no-store" })
+              .then((res) => res.text())
+              .then((text) => {
+                const msg = text && text.trim() ? text.trim() : "Actualización ejecutada.";
+                const isError = msg.startsWith("ERROR") || msg.startsWith("AVISO");
+                setStatus(msg, isError);
+                if (!isError) {
+                  // Intentar extraer la URL de origen real devuelta por el CGI,
+                  // por ejemplo: "OK: web10 actualizado a http://.../index.m3u8 y reiniciado."
+                  let originUrl = url;
+                  const m = msg.match(/actualizado a\s+(\S+)/);
+                  if (m && m[1]) {
+                    originUrl = m[1];
+                    input.value = originUrl;
+                  }
+                  channelMap = channelMap || {};
+                  channelMap[ch] = originUrl;
+                  // Esperar a que el monitor confirme que el canal ya genera segmentos
+                  waitForChannelHealthy(ch, originUrl);
+                }
+              })
+              .catch(() => {
+                setStatus("Error al intentar actualizar el canal.", true);
+              })
+              .finally(() => {
+                btn.disabled = false;
+              });
+          });
+
+          applyChannelUrl(select.value);
+        }
+
+        function attachStatusMonitor() {
+          const el = document.getElementById("web-monitor-status");
+          const bannerEl = document.getElementById("web67-main-alert");
+          const web6HealthEl = document.getElementById("web6-health-status");
+          const web7HealthEl = document.getElementById("web7-health-status");
+          if (!el) return;
+
+          const renderWeb67Health = (badChannels) => {
+            if (!bannerEl || !web6HealthEl || !web7HealthEl) return;
+
+            const bad = Array.isArray(badChannels) ? badChannels : [];
+            const web6Bad = bad.includes("web6");
+            const web7Bad = bad.includes("web7");
+
+            if (!web6Bad && !web7Bad) {
+              bannerEl.textContent = "Panel principal: web6 y web7 funcionando correctamente.";
+              bannerEl.classList.add("is-ok");
+              bannerEl.classList.remove("is-error");
+              web6HealthEl.textContent = "Estado web6: OK";
+              web6HealthEl.style.color = "#2e7d32";
+              web7HealthEl.textContent = "Estado web7: OK";
+              web7HealthEl.style.color = "#2e7d32";
+              return;
+            }
+
+            bannerEl.textContent =
+              "ALERTA: revisar " +
+              [web6Bad ? "web6" : null, web7Bad ? "web7" : null]
+                .filter(Boolean)
+                .join(", ") +
+              " (sin actualización de segmentos).";
+            bannerEl.classList.remove("is-ok");
+            bannerEl.classList.add("is-error");
+
+            web6HealthEl.textContent = web6Bad ? "Estado web6: FALLANDO" : "Estado web6: OK";
+            web6HealthEl.style.color = web6Bad ? "#b00020" : "#2e7d32";
+            web7HealthEl.textContent = web7Bad ? "Estado web7: FALLANDO" : "Estado web7: OK";
+            web7HealthEl.style.color = web7Bad ? "#b00020" : "#2e7d32";
+          };
+
+          const fetchJsonOrNull = (url) =>
+            fetch(url, { cache: "no-store" })
+              .then((res) => {
+                if (res.status === 404) return null;
+                if (!res.ok) throw new Error("status " + res.status);
+                return res.json();
+              });
+
+          const update = () => {
+            Promise.all([
+              fetchJsonOrNull("/logs/web_status.json?ts=" + Date.now()),
+              fetchJsonOrNull("/logs/web67_status.json?ts=" + Date.now()),
+            ])
+              .then(([globalData, web67Data]) => {
+                if (!globalData && !web67Data) {
+                  el.textContent = "Monitor: sin datos de estado aún.";
+                  el.style.color = "#555";
+                  renderWeb67Health([]);
+                  return;
+                }
+
+                if (globalData && globalData.public_ip && typeof globalData.public_ip === "string") {
+                  if (globalData.public_ip !== publicHost) {
+                    publicHost = globalData.public_ip;
+                    applyVlcUrls();
+                  }
+                }
+
+                const globalArr =
+                  globalData && Array.isArray(globalData.channels_not_updating)
+                    ? globalData.channels_not_updating
+                    : [];
+                const web67Arr =
+                  web67Data && Array.isArray(web67Data.channels_not_updating)
+                    ? web67Data.channels_not_updating
+                    : [];
+
+                const merged = Array.from(new Set([].concat(globalArr, web67Arr)));
+
+                if (merged.length === 0) {
+                  el.textContent = "Monitor: todos los canales web se están actualizando correctamente.";
+                  el.style.color = "#2e7d32";
+                } else {
+                  el.textContent =
+                    "Monitor: canales que no están actualizando segmentos: " +
+                    merged.join(", ");
+                  el.style.color = "#b00020";
+                }
+
+                renderWeb67Health(web67Arr);
+              })
+              .catch(() => {
+                el.textContent = "Monitor: no se pudo leer el estado actual.";
+                el.style.color = "#b00020";
+                if (bannerEl) {
+                  bannerEl.textContent = "ALERTA: no se pudo leer el monitor web6/web7.";
+                  bannerEl.classList.remove("is-ok");
+                  bannerEl.classList.add("is-error");
+                }
+                if (web6HealthEl) {
+                  web6HealthEl.textContent = "Estado web6: monitor no disponible";
+                  web6HealthEl.style.color = "#b00020";
+                }
+                if (web7HealthEl) {
+                  web7HealthEl.textContent = "Estado web7: monitor no disponible";
+                  web7HealthEl.style.color = "#b00020";
+                }
+              });
+          };
+
+          update();
+          setInterval(update, 30000);
+        }
+
+        function attachWebChannelReloadButtons() {
+          const mappings = [
+            { buttonId: "web1-reload-btn", videoId: "web1-player" },
+            { buttonId: "web2-reload-btn", videoId: "web2-player" },
+            { buttonId: "web3-reload-btn", videoId: "web3-player" },
+            { buttonId: "web4-reload-btn", videoId: "web4-player" },
+            { buttonId: "web5-reload-btn", videoId: "web5-player" },
+            { buttonId: "web6-reload-btn", videoId: "web6-player" },
+            { buttonId: "web7-reload-btn", videoId: "web7-player" },
+            { buttonId: "web8-reload-btn", videoId: "web8-player" },
+            { buttonId: "web9-reload-btn", videoId: "web9-player" },
+            { buttonId: "web10-reload-btn", videoId: "web10-player" },
+            { buttonId: "web11-reload-btn", videoId: "web11-player" },
+            { buttonId: "web12-reload-btn", videoId: "web12-player" },
+            { buttonId: "web13-reload-btn", videoId: "web13-player" },
+            { buttonId: "web14-reload-btn", videoId: "web14-player" },
+            { buttonId: "web15-reload-btn", videoId: "web15-player" },
+            { buttonId: "web16-reload-btn", videoId: "web16-player" },
+          ];
+
+          mappings.forEach(({ buttonId, videoId }) => {
+            const btn = document.getElementById(buttonId);
+            if (!btn) return;
+            btn.addEventListener("click", () => {
+              restartHlsPlayer(videoId);
+            });
+          });
+        }
+
+        function attachSingleChannelRestartButtons() {
+          const mappings = Array.from({ length: 16 }, (_, idx) => {
+            const ch = idx + 1;
+            const channel = "web" + ch;
+            return {
+              buttonId: channel + "-restart-proxy-btn",
+              statusId: channel + "-restart-status",
+              channel,
+              videoId: channel + "-player",
+            };
+          });
+
+          mappings.forEach(({ buttonId, statusId, channel, videoId }) => {
+            const btn = document.getElementById(buttonId);
+            const statusEl = document.getElementById(statusId);
+            if (!btn || !statusEl) return;
+
+            const setStatus = (text, isError) => {
+              statusEl.textContent = text;
+              statusEl.style.color = isError ? "#b00020" : "#555";
+            };
+
+            btn.addEventListener("click", () => {
+              btn.disabled = true;
+              setStatus("Reiniciando " + channel + "...", false);
+
+              const qs = "ch=" + encodeURIComponent(channel) + "&ts=" + Date.now();
+              fetch("/scripts/restart_web_channel.sh?" + qs, { cache: "no-store" })
+                .then((res) => res.text())
+                .then((text) => {
+                  const msg = text && text.trim() ? text.trim() : "Reinicio ejecutado.";
+                  const isError = msg.startsWith("ERROR") || msg.startsWith("AVISO");
+                  setStatus(msg, isError);
+                  if (!isError) {
+                    restartHlsPlayer(videoId);
+                  }
+                })
+                .catch(() => {
+                  setStatus("Error al reiniciar " + channel + ".", true);
+                })
+                .finally(() => {
+                  btn.disabled = false;
+                });
+            });
+          });
+        }
+
+        // Inicializa las URLs visibles de VLC con el host actual
+        applyVlcUrls();
+
+        attachPlaylistInspector();
+        attachRestartHandler();
+        attachChannelUpdateHandler();
+        attachStatusMonitor();
+        attachWebChannelReloadButtons();
+        attachSingleChannelRestartButtons();
+      })();
+    </script>
+  </body>
+</html>
+

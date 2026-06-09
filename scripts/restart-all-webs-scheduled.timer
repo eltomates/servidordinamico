@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer para reiniciar web1-web16 a las 05:00 y 11:45
+
+[Timer]
+OnCalendar=*-*-* 05:00:00
+OnCalendar=*-*-* 11:45:00
+Unit=restart-all-webs-scheduled.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

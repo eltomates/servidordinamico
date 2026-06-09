@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+
+# Proxy HLS para páginas o streams remotos que requieren extracción previa.
+# Entrada:  https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32
+# Salida:   /var/www/html/hls/web14/index.m3u8 (accesible como /hls/web14/index.m3u8)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/var/www/html/scripts/lib_web_hls.sh
+. "$SCRIPT_DIR/lib_web_hls.sh"
+acquire_single_instance_lock "${BASH_SOURCE[0]}" || exit 0
+
+PRIMARY_CONFIG="/var/www/html/logs/web_sources.env"
+LEGACY_CONFIG="$SCRIPT_DIR/web_sources.env"
+CONFIG_SRC_URL=""
+
+if [ -f "$PRIMARY_CONFIG" ]; then
+  # shellcheck source=/var/www/html/logs/web_sources.env
+  . "$PRIMARY_CONFIG"
+  CONFIG_SRC_URL="${WEB14_URL:-}"
+elif [ -f "$LEGACY_CONFIG" ]; then
+  # shellcheck source=/var/www/html/scripts/web_sources.env
+  . "$LEGACY_CONFIG"
+  CONFIG_SRC_URL="${WEB14_URL:-}"
+fi
+
+OUT="${OUT:-/var/www/html/hls/web14}"
+SRC_URL="${SRC_URL:-${CONFIG_SRC_URL:-https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32}}"
+YT_FORMAT_SELECTOR="${YT_FORMAT_SELECTOR:-bv*[vcodec^=avc1][height<=720][ext=mp4]+ba[ext=mp4]/bv*[vcodec^=avc1][ext=mp4]+ba[ext=mp4]/b}"
+PLUTO_TARGET_BANDWIDTH="${PLUTO_TARGET_BANDWIDTH:-1577180}"
+MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-45}"
+WATCHDOG_INTERVAL_SECONDS="${WATCHDOG_INTERVAL_SECONDS:-10}"
+FFMPEG_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0}"
+USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-1}"
+PLUTO_CHROMIUM_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_TIMEOUT_SECONDS:-15}"
+PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS:-210}"
+PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-1}"
+PLUTO_SKIP_VERIFY="${PLUTO_SKIP_VERIFY:-1}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-12}"
+
+mkdir -p "$OUT"
+
+clear_published_output() {
+  find "$OUT" -maxdepth 1 -type f \( -name 'index.m3u8' -o -name 'seg_*.ts' \) -delete 2>/dev/null || true
+}
+
+is_direct_stream_url() {
+  case "$1" in
+    *.m3u8*|*.mpd*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_pluto_source_url() {
+  local page_url="$1"
+  local chromium_resolver="$SCRIPT_DIR/bin/resolve_pluto_chromium.py"
+  local chromium_url=""
+  local chromium_timeout_cmd=( )
+
+  if command -v timeout >/dev/null 2>&1; then
+    chromium_timeout_cmd=(timeout "$PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS")
+  fi
+
+  if [ "$USE_CHROMIUM_RESOLVER" = "1" ] && [ -f "$chromium_resolver" ] && command -v python3 >/dev/null 2>&1; then
+    # En este host el modo headless directo es mas estable que xvfb-run.
+    chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY="$PLUTO_SKIP_VERIFY" python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
+
+    if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
+      printf '%s\n' "$chromium_url"
+      return 0
+    fi
+  fi
+
+  if [ "$PLUTO_REQUIRE_CHROMIUM" = "1" ]; then
+    echo "[ffmpeg_web14_proxy] Chromium no resolvio URL valida para Pluto; reintentando sin fallback directo." >&2
+    return 1
+  fi
+
+  python3 - "$page_url" "$PLUTO_TARGET_BANDWIDTH" <<'PY'
+import re
+import sys
+import uuid
+import urllib.parse
+import urllib.request
+
+page_url = sys.argv[1]
+target_bandwidth = int(sys.argv[2])
+
+match = re.search(r'/live-tv/([a-f0-9]{24})', page_url)
+if not match:
+    raise SystemExit(f"URL de Pluto no válida: {page_url}")
+
+channel_id = match.group(1)
+sid = str(uuid.uuid4())
+device_id = str(uuid.uuid4())
+query = urllib.parse.urlencode({
+    'deviceType': 'web',
+    'deviceMake': 'Chrome',
+    'deviceModel': 'Chrome',
+    'deviceVersion': '124.0.0.0',
+    'appName': 'web',
+    'appVersion': 'unknown',
+    'buildVersion': 'unknown',
+    'sid': sid,
+    'deviceDNT': '0',
+    'deviceId': device_id,
+    'advertisingId': '',
+    'userId': '',
+    'clientTime': '0',
+    'serverSideAds': 'true',
+    'terminate': 'false',
+    'includeExtendedEvents': 'false',
+})
+master_url = (
+    'https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/'
+    f'channel/{channel_id}/master.m3u8?{query}'
+)
+
+request = urllib.request.Request(master_url, headers={'User-Agent': 'Mozilla/5.0'})
+with urllib.request.urlopen(request, timeout=30) as response:
+    final_url = response.geturl()
+    text = response.read().decode('utf-8', 'ignore')
+
+best_url = None
+best_score = None
+pending_bandwidth = None
+
+for raw_line in text.splitlines():
+    line = raw_line.strip()
+    if not line:
+        continue
+    if line.startswith('#EXT-X-STREAM-INF:'):
+        band_match = re.search(r'BANDWIDTH=(\d+)', line)
+        pending_bandwidth = int(band_match.group(1)) if band_match else None
+        continue
+    if line.startswith('#'):
+        continue
+    if pending_bandwidth is None:
+        continue
+
+    score = abs(pending_bandwidth - target_bandwidth)
+    if best_score is None or score < best_score:
+        best_score = score
+        best_url = urllib.parse.urljoin(final_url, line)
+    pending_bandwidth = None
+
+if not best_url:
+    print(final_url)
+    raise SystemExit(0)
+
+variant_request = urllib.request.Request(best_url, headers={'User-Agent': 'Mozilla/5.0'})
+with urllib.request.urlopen(variant_request, timeout=30) as response:
+  variant_text = response.read().decode('utf-8', 'ignore')
+
+if 'ptv_takedownslates' in variant_text:
+  raise SystemExit(
+    'Pluto devolvio takedown slate para este canal; no hay stream reproducible desde este servidor'
+  )
+
+print(best_url)
+PY
+}
+
+resolve_source_url() {
+  local src_url="$1"
+
+  case "$src_url" in
+    https://pluto.tv/*/live-tv/*)
+      resolve_pluto_source_url "$src_url"
+      ;;
+    *)
+      printf '%s\n' "$src_url"
+      ;;
+  esac
+}
+
+run_ffmpeg_from_direct_url() {
+  local input_url="$1"
+
+  echo "[ffmpeg_web14_proxy] Usando origen directo: $input_url" >&2
+
+  ffmpeg \
+    -loglevel info \
+    -fflags +discardcorrupt+genpts \
+    -err_detect ignore_err \
+    -reconnect 1 \
+    -reconnect_streamed 1 \
+    -reconnect_on_network_error 1 \
+    -reconnect_on_http_error 4xx,5xx \
+    -reconnect_delay_max 5 \
+    -user_agent "$FFMPEG_USER_AGENT" \
+    -i "$input_url" \
+    -c:v libx264 \
+    -preset veryfast \
+    -tune zerolatency \
+    -profile:v baseline \
+    -level 3.1 \
+    -r 20 \
+    -b:v 800k \
+    -maxrate 900k \
+    -bufsize 2400k \
+    -max_muxing_queue_size 2048 \
+    -g 40 \
+    -keyint_min 40 \
+    -c:a aac \
+    -ac 2 \
+    -b:a 128k \
+    -f hls \
+    -hls_time 4 \
+    -hls_list_size "$HLS_LIST_SIZE" \
+    -start_number "$START_NUMBER" \
+    -hls_flags delete_segments+program_date_time+independent_segments \
+    -hls_segment_filename "$OUT/seg_%06d.ts" \
+    "$OUT/index.m3u8" &
+}
+
+run_ffmpeg_from_ytdlp() {
+  local source_url="$1"
+
+  if ! command -v yt-dlp >/dev/null 2>&1; then
+    echo "[ffmpeg_web14_proxy] yt-dlp no está instalado; no se puede resolver $source_url" >&2
+    return 1
+  fi
+
+  echo "[ffmpeg_web14_proxy] Resolviendo y enviando por tubería: $source_url" >&2
+
+  set -o pipefail
+  yt-dlp --no-warnings --no-playlist -f "$YT_FORMAT_SELECTOR" -o - "$source_url" | \
+    ffmpeg \
+      -loglevel info \
+      -fflags +discardcorrupt+genpts \
+      -err_detect ignore_err \
+      -i pipe:0 \
+      -c:v libx264 \
+      -preset veryfast \
+      -tune zerolatency \
+      -profile:v baseline \
+      -level 3.1 \
+      -r 20 \
+      -b:v 800k \
+      -maxrate 900k \
+      -bufsize 2400k \
+      -max_muxing_queue_size 2048 \
+      -g 40 \
+      -keyint_min 40 \
+      -c:a aac \
+      -ac 2 \
+      -b:a 128k \
+      -f hls \
+      -hls_time 4 \
+      -hls_list_size 6 \
+      -start_number "$START_NUMBER" \
+      -hls_flags delete_segments+program_date_time+independent_segments \
+      -hls_segment_filename "$OUT/seg_%06d.ts" \
+      "$OUT/index.m3u8"
+}
+
+while true; do
+  set +e
+
+  START_NUMBER="$(date +%s)"
+  RESOLVED_SRC_URL="$(resolve_source_url "$SRC_URL")"
+
+  if [ $? -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then
+    clear_published_output
+
+    run_ffmpeg_from_direct_url "$RESOLVED_SRC_URL"
+    ffmpeg_pid=$!
+  else
+    clear_published_output
+
+    echo "[ffmpeg_web14_proxy] No se pudo resolver una URL reproducible para $SRC_URL" >&2
+
+    case "$SRC_URL" in
+      https://pluto.tv/*/live-tv/*)
+        set -e
+        sleep 10
+        continue
+        ;;
+    esac
+
+    run_ffmpeg_from_ytdlp "$SRC_URL" &
+    ffmpeg_pid=$!
+  fi
+
+  last_ok_ts="$(date +%s)"
+  if [ -f "$OUT/index.m3u8" ]; then
+    last_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+  else
+    last_mtime="$last_ok_ts"
+  fi
+
+  while kill -0 "$ffmpeg_pid" 2>/dev/null; do
+    sleep "$WATCHDOG_INTERVAL_SECONDS"
+
+    if [ -f "$OUT/index.m3u8" ]; then
+      current_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+      if [ "$current_mtime" != "$last_mtime" ]; then
+        last_mtime="$current_mtime"
+        last_ok_ts="$(date +%s)"
+      fi
+    fi
+
+    now_ts="$(date +%s)"
+    stale_seconds=$(( now_ts - last_ok_ts ))
+
+    if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
+      echo "[ffmpeg_web14_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
+      kill "$ffmpeg_pid" 2>/dev/null
+      sleep 2
+      break
+    fi
+  done
+
+  wait "$ffmpeg_pid"
+  rc=$?
+  set -e
+
+  echo "[ffmpeg_web14_proxy] ffmpeg salió con código $rc. Reintentando en 5 segundos..." >&2
+  sleep 5
+done

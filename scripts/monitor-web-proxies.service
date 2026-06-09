@@ -1,0 +1,18 @@
+[Unit]
+Description=Monitor HLS web proxies
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agus
+Group=agus
+WorkingDirectory=/var/www/html
+ExecStart=/usr/bin/bash /var/www/html/scripts/monitor_web_proxies.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/www/html/logs/monitor_web_proxies.log
+StandardError=append:/var/www/html/logs/monitor_web_proxies.log
+
+[Install]
+WantedBy=multi-user.target

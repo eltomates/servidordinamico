@@ -1,0 +1,35 @@
+#EXTM3U
+#EXTINF:-1,HDMI1
+http://192.168.1.68:8081/hls/hdmi1/index.m3u8
+#EXTINF:-1,HDMI2
+http://192.168.1.68:8081/hls/hdmi2/index.m3u8
+#EXTINF:-1,HDMI3
+http://192.168.1.68:8081/hls/hdmi3/index.m3u8
+#EXTINF:-1,Canal web 1 (Planet)
+http://192.168.1.68:8081/hls/web1/index.m3u8
+#EXTINF:-1,Canal web 2 (HBO)
+http://192.168.1.68:8081/hls/web2/index.m3u8
+
+#EXTINF:-1,Canal web 3 (Cartoon Network)
+http://192.168.1.68:8081/hls/web3/index.m3u8
+
+#EXTINF:-1,Canal web 4 (History Channel)
+http://192.168.1.68:8081/hls/web4/index.m3u8
+
+#EXTINF:-1,Canal web 6 (Cine Clasico)
+http://192.168.1.68:8081/hls/web6/index.m3u8
+
+#EXTINF:-1,Canal web 7 (Cine Estelar)
+http://192.168.1.68:8081/hls/web7/index.m3u8
+
+#EXTINF:-1,Canal web 10 (Cine Adrenalina)
+http://192.168.1.68:8081/hls/web10/index.m3u8
+
+#EXTINF:-1,Canal web 11 (Hits Mexicanos)
+http://192.168.1.68:8081/hls/web11/index.m3u8
+
+#EXTINF:-1,Canal web 12 (Nickelodeon)
+http://192.168.1.68:8081/hls/web12/index.m3u8
+
+#EXTINF:-1,Canal web 13 (TeleFormula)
+http://192.168.1.68:8081/hls/web13/index.m3u8

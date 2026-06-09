@@ -1,0 +1,13 @@
+[Unit]
+Description=Enviar IP publica a cablestar.giize.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/html/scripts
+ExecStart=/usr/bin/bash /var/www/html/scripts/send_public_ip.sh
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

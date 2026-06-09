@@ -1,0 +1,17 @@
+[Unit]
+Description=Proxys HLS web y contenedores de video
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=agus
+WorkingDirectory=/var/www/html/scripts
+# Usa los scripts existentes para levantar y parar todo (proxys web + dock_video1/dock_video2)
+ExecStart=/usr/bin/bash /var/www/html/scripts/start_all_services.sh
+ExecStop=/usr/bin/bash /var/www/html/scripts/stop_all_services.sh
+RemainAfterExit=yes
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

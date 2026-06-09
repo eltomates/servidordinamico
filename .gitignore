@@ -1,0 +1,18 @@
+# Generated streaming output
+hls/
+
+# Runtime logs and lock files
+logs/
+
+# Secrets and environment files
+*.env
+*.env.*
+
+# Backup/temp artifacts
+*.bak
+*.tmp
+*.swp
+*.out
+
+# Local packages/binaries
+*.deb

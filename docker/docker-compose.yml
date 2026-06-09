@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  dock_video1:
+    build: .
+    container_name: dock_video1
+    privileged: true
+    environment:
+      - VNC_PORT=5901
+      - NOVNC_PORT=6081
+      - DISPLAY_NUMBER=11
+      - VIDEO_URL=https://www.google.com/
+      - HLS_OUTPUT_DIR=/hls/dock_video1
+      - AUDIO_DEVICE=default
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ../hls/dock_video1:/hls/dock_video1
+    devices:
+      - "/dev/snd:/dev/snd"
+    group_add:
+      - "audio"

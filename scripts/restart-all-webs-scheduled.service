@@ -1,0 +1,14 @@
+[Unit]
+Description=Reinicio programado de proxies web1-web16
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=agus
+Group=agus
+WorkingDirectory=/var/www/html
+ExecStart=/usr/bin/bash /var/www/html/scripts/restart_all_webs_scheduled.sh
+
+[Install]
+WantedBy=multi-user.target

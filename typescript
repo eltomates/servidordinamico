@@ -1,0 +1,14 @@
+Script iniciado en 2026-03-11 07:37:59-06:00 [TERM="xterm-256color" TTY="/dev/pts/7" COLUMNS="112" LINES="21"]
+[?2004h]0;agus@cablestar: /var/www/html[01;32magus@cablestar[00m:[01;34m/var/www/html[00m$ cd scripts/
+[?2004l[?2004h]0;agus@cablestar: /var/www/html/scripts[01;32magus@cablestar[00m:[01;34m/var/www/html/scripts[00m$ [7mbash restart_web_proxies.sh[27mbash restart_web_proxies.sh
+[?2004lContent-Type: text/plain
+
+Proxys web1-web9 iniciados.
+OK: Proxys web1-web9 reiniciados.
+[?2004h]0;agus@cablestar: /var/www/html/scripts[01;32magus@cablestar[00m:[01;34m/var/www/html/scripts[00m$ bash restart_web_proxies.sh
+[?2004lContent-Type: text/plain
+
+Proxys web1-web9 iniciados.
+OK: Proxys web1-web9 reiniciados.
+[?2004h]0;agus@cablestar: /var/www/html/scripts[01;32magus@cablestar[00m:[01;34m/var/www/html/scripts[00m$ 
+Script terminado en 2026-03-11 07:50:46-06:00 [CÓDIGO_SALIDA_ORDEN="0"]
