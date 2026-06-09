@@ -16,3 +16,7 @@ logs/
 
 # Local packages/binaries
 *.deb
+
+# Python cache
+__pycache__/
+*.pyc
