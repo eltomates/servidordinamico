@@ -35,7 +35,7 @@ FFMPEG_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64
 USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-1}"
 PLUTO_CHROMIUM_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_TIMEOUT_SECONDS:-15}"
 PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS:-35}"
-PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-1}"
+PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-0}"
 HLS_LIST_SIZE="${HLS_LIST_SIZE:-20}"
 
 mkdir -p "$OUT"
@@ -58,11 +58,11 @@ resolve_pluto_source_url() {
   local chromium_timeout_cmd=( )
 
   if command -v timeout >/dev/null 2>&1; then
-    chromium_timeout_cmd=(timeout "$PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS")
+    chromium_timeout_cmd=(timeout -k 5 "$PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS")
   fi
 
   if [ "$USE_CHROMIUM_RESOLVER" = "1" ] && [ -f "$chromium_resolver" ] && command -v python3 >/dev/null 2>&1; then
-    chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" 2>/dev/null | tail -n1; } 9>&-)"
+    chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY=1 python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
 
     if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
       printf '%s\n' "$chromium_url"
@@ -263,8 +263,12 @@ while true; do
 
   START_NUMBER="$(date +%s)"
   RESOLVED_SRC_URL="$(resolve_source_url "$SRC_URL")"
+  resolve_rc=$?
 
-  if [ $? -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then
+  # Evita mezclar index/segmentos viejos de ejecuciones fallidas.
+  clear_published_output
+
+  if [ "$resolve_rc" -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then
     run_ffmpeg_from_direct_url "$RESOLVED_SRC_URL"
     ffmpeg_pid=$!
   else

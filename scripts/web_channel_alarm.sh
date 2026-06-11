@@ -17,6 +17,8 @@ fi
 LOG_DIR="/var/www/html/logs"
 ALARM_LOG="$LOG_DIR/web_alarm.log"
 STATUS_FILE="$LOG_DIR/web_alarm_status.json"
+EMAIL_ENV_PRIMARY="$LOG_DIR/web_alarm_email.env"
+EMAIL_ENV_FALLBACK="/var/www/html/scripts/web_alarm_email.env"
 
 mkdir -p "$LOG_DIR"
 
@@ -24,6 +26,18 @@ NOW_EPOCH="$(date +%s)"
 NOW_HUMAN="$(date '+%F %T')"
 
 echo "[web_alarm] $NOW_HUMAN channel=$CHANNEL level=$LEVEL msg=$MESSAGE" >> "$ALARM_LOG"
+
+if [ -f "$EMAIL_ENV_PRIMARY" ]; then
+    # shellcheck source=/var/www/html/logs/web_alarm_email.env
+    set -a
+    . "$EMAIL_ENV_PRIMARY"
+    set +a
+elif [ -f "$EMAIL_ENV_FALLBACK" ]; then
+    # shellcheck source=/var/www/html/scripts/web_alarm_email.env
+    set -a
+    . "$EMAIL_ENV_FALLBACK"
+    set +a
+fi
 
 python3 - "$STATUS_FILE" "$CHANNEL" "$LEVEL" "$MESSAGE" "$NOW_EPOCH" <<'PY'
 import json
@@ -60,3 +74,69 @@ with open(tmp, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=True, separators=(",", ":"))
 os.replace(tmp, status_file)
 PY
+
+send_email_alert() {
+    if [ "${ENABLE_EMAIL_ALERTS:-0}" != "1" ]; then
+        return 2
+    fi
+
+    if [ -z "${EMAIL_TO:-}" ] || [ -z "${SMTP_HOST:-}" ] || [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
+        echo "[web_alarm] $NOW_HUMAN email no configurado completamente; se omite envio." >> "$ALARM_LOG"
+        return 2
+    fi
+
+    if [ "$LEVEL" != "ALARM" ] && [ "${EMAIL_SEND_OK:-0}" != "1" ]; then
+        return 2
+    fi
+
+    python3 - "$CHANNEL" "$LEVEL" "$MESSAGE" "$NOW_HUMAN" <<'PY'
+import os
+import smtplib
+import ssl
+import sys
+from email.message import EmailMessage
+
+channel, level, message, now_human = sys.argv[1:]
+
+smtp_host = os.getenv("SMTP_HOST", "").strip()
+smtp_port = int(os.getenv("SMTP_PORT", "587").strip() or "587")
+smtp_user = os.getenv("SMTP_USER", "").strip()
+smtp_pass = os.getenv("SMTP_PASS", "")
+smtp_from = os.getenv("EMAIL_FROM", smtp_user).strip()
+email_to = [x.strip() for x in os.getenv("EMAIL_TO", "").split(",") if x.strip()]
+subject_prefix = os.getenv("EMAIL_SUBJECT_PREFIX", "WEB-HLS")
+starttls = os.getenv("SMTP_STARTTLS", "1").strip() == "1"
+
+if not (smtp_host and smtp_user and smtp_pass and smtp_from and email_to):
+        raise SystemExit(0)
+
+msg = EmailMessage()
+msg["From"] = smtp_from
+msg["To"] = ", ".join(email_to)
+msg["Subject"] = f"[{subject_prefix}] {level} {channel}"
+msg.set_content(
+        f"Hora: {now_human}\n"
+        f"Canal: {channel}\n"
+        f"Nivel: {level}\n"
+        f"Mensaje: {message}\n"
+)
+
+context = ssl.create_default_context()
+with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+        if starttls:
+                server.starttls(context=context)
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+PY
+}
+
+if send_email_alert; then
+    echo "[web_alarm] $NOW_HUMAN email enviado channel=$CHANNEL level=$LEVEL" >> "$ALARM_LOG"
+else
+    rc=$?
+    if [ "$rc" -eq 2 ]; then
+        echo "[web_alarm] $NOW_HUMAN email omitido channel=$CHANNEL level=$LEVEL" >> "$ALARM_LOG"
+    else
+        echo "[web_alarm] $NOW_HUMAN fallo al enviar email channel=$CHANNEL level=$LEVEL" >> "$ALARM_LOG"
+    fi
+fi

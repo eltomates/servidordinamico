@@ -5,6 +5,8 @@ http://192.168.1.68:8081/hls/hdmi1/index.m3u8
 http://192.168.1.68:8081/hls/hdmi2/index.m3u8
 #EXTINF:-1,HDMI3
 http://192.168.1.68:8081/hls/hdmi3/index.m3u8
+#EXTINF:-1,HDMI4
+http://192.168.1.68:8081/hls/hdmi4/index.m3u8
 #EXTINF:-1,Canal web 1 (Planet)
 http://192.168.1.68:8081/hls/web1/index.m3u8
 #EXTINF:-1,Canal web 2 (HBO)

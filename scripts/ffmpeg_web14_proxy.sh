@@ -38,6 +38,10 @@ PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS:-210}
 PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-1}"
 PLUTO_SKIP_VERIFY="${PLUTO_SKIP_VERIFY:-1}"
 HLS_LIST_SIZE="${HLS_LIST_SIZE:-12}"
+PLUTO_CHROMIUM_ATTEMPTS="${PLUTO_CHROMIUM_ATTEMPTS:-3}"
+FFMPEG_RW_TIMEOUT_US="${FFMPEG_RW_TIMEOUT_US:-15000000}"
+FFMPEG_HTTP_PERSISTENT="${FFMPEG_HTTP_PERSISTENT:-0}"
+FORCE_KILL_GRACE_SECONDS="${FORCE_KILL_GRACE_SECONDS:-8}"
 
 mkdir -p "$OUT"
 
@@ -57,6 +61,7 @@ resolve_pluto_source_url() {
   local chromium_resolver="$SCRIPT_DIR/bin/resolve_pluto_chromium.py"
   local chromium_url=""
   local chromium_timeout_cmd=( )
+  local attempt=1
 
   if command -v timeout >/dev/null 2>&1; then
     chromium_timeout_cmd=(timeout "$PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS")
@@ -64,12 +69,17 @@ resolve_pluto_source_url() {
 
   if [ "$USE_CHROMIUM_RESOLVER" = "1" ] && [ -f "$chromium_resolver" ] && command -v python3 >/dev/null 2>&1; then
     # En este host el modo headless directo es mas estable que xvfb-run.
-    chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY="$PLUTO_SKIP_VERIFY" python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
+    while [ "$attempt" -le "$PLUTO_CHROMIUM_ATTEMPTS" ]; do
+      chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY="$PLUTO_SKIP_VERIFY" python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
 
-    if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
-      printf '%s\n' "$chromium_url"
-      return 0
-    fi
+      if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
+        printf '%s\n' "$chromium_url"
+        return 0
+      fi
+
+      attempt=$(( attempt + 1 ))
+      sleep 2
+    done
   fi
 
   if [ "$PLUTO_REQUIRE_CHROMIUM" = "1" ]; then
@@ -184,6 +194,8 @@ run_ffmpeg_from_direct_url() {
     -loglevel info \
     -fflags +discardcorrupt+genpts \
     -err_detect ignore_err \
+    -rw_timeout "$FFMPEG_RW_TIMEOUT_US" \
+    -http_persistent "$FFMPEG_HTTP_PERSISTENT" \
     -reconnect 1 \
     -reconnect_streamed 1 \
     -reconnect_on_network_error 1 \
@@ -308,13 +320,24 @@ while true; do
     if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
       echo "[ffmpeg_web14_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
       kill "$ffmpeg_pid" 2>/dev/null
-      sleep 2
+      sleep "$FORCE_KILL_GRACE_SECONDS"
+
+      if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+        echo "[ffmpeg_web14_proxy] ffmpeg sigue vivo tras SIGTERM; forzando SIGKILL ($ffmpeg_pid)" >&2
+        kill -9 "$ffmpeg_pid" 2>/dev/null || true
+      fi
+
       break
     fi
   done
 
-  wait "$ffmpeg_pid"
-  rc=$?
+  rc=0
+  if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+    wait "$ffmpeg_pid"
+    rc=$?
+  else
+    wait "$ffmpeg_pid" 2>/dev/null || rc=$?
+  fi
   set -e
 
   echo "[ffmpeg_web14_proxy] ffmpeg salió con código $rc. Reintentando en 5 segundos..." >&2

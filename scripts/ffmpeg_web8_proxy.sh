@@ -16,11 +16,13 @@ SRC_URL="${SRC_URL:-https://streaming.alwaysdata.net/tudn.php}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
 HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-120}"
+VIDEO_MAP="${VIDEO_MAP:-0:8}"
 
 mkdir -p "$OUT"
 
 while true; do
   set +e
+  echo "[ffmpeg_web8_proxy] usando VIDEO_MAP=${VIDEO_MAP}" >&2
 
   # Mantener los segmentos previos permite que el reproductor conserve buffer tras reinicios.
   trim_hls_segments "$OUT" "$KEEP_SEGMENTS"
@@ -39,7 +41,7 @@ while true; do
     -reconnect_on_http_error 4xx,5xx \
     -reconnect_delay_max 10 \
     -i "$SRC_URL" \
-    -map 0:v:0 \
+    -map "$VIDEO_MAP" \
     -map 0:a:0 \
     -c:v libx264 \
     -preset veryfast \

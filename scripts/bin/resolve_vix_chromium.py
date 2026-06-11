@@ -8,11 +8,13 @@ Salida: URL de manifest (preferente .m3u8) en stdout, diagnostico en stderr.
 
 import os
 import sys
+import json
 import urllib.request
 
 page_url = sys.argv[1] if len(sys.argv) > 1 else "https://vix.com/es-es/canales/premium/channel-callsign-NU9VE"
 timeout_sec = int(sys.argv[2]) if len(sys.argv) > 2 else 30
 headless_mode = os.environ.get("PW_HEADLESS", "1") != "0"
+output_mode = os.environ.get("VIX_OUTPUT", "plain").strip().lower()
 email = os.environ.get("VIX_USER") or os.environ.get("VIX_EMAIL") or ""
 password = os.environ.get("VIX_PASSWORD") or ""
 
@@ -66,6 +68,10 @@ def try_verify_hls(url: str, timeout: int = 8) -> bool:
         text = response.read().decode("utf-8", "ignore")
 
     if "#EXTM3U" not in text:
+        return False
+    if "#EXT-X-ENDLIST" in text:
+        return False
+    if "/beacon/" in text or "redirect_url=" in text:
         return False
     return any(marker in text for marker in ("#EXT-X-STREAM-INF", ".ts", ".m4s", ".mp4"))
 
@@ -280,6 +286,33 @@ def main() -> int:
     hls_seen = []
     dash_seen = []
     drm_seen = []
+    browser_user_agent = (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+    browser_cookies = []
+
+    def emit_result(url: str) -> int:
+        if output_mode == "json":
+            cookie_pairs = []
+            for cookie in browser_cookies:
+                name = cookie.get("name", "").strip()
+                value = str(cookie.get("value", "")).strip()
+                if name:
+                    cookie_pairs.append(f"{name}={value}")
+
+            payload = {
+                "stream_url": url,
+                "referer": page_url,
+                "user_agent": browser_user_agent,
+                "cookie": "; ".join(cookie_pairs),
+            }
+            print(json.dumps(payload, ensure_ascii=True))
+            return 0
+
+        print(url)
+        return 0
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -293,11 +326,7 @@ def main() -> int:
             ],
         )
         context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
+            user_agent=browser_user_agent,
             viewport={"width": 1280, "height": 720},
             locale="es-MX",
             timezone_id="America/Mexico_City",
@@ -371,6 +400,7 @@ def main() -> int:
             if hls_seen:
                 break
 
+        browser_cookies = context.cookies()
         browser.close()
 
     # Mantener orden de captura y hacer desempate estable por score.
@@ -379,15 +409,13 @@ def main() -> int:
     for candidate in hls_unique[:8]:
         try:
             if try_verify_hls(candidate):
-                print(candidate)
-                return 0
+                return emit_result(candidate)
         except Exception as exc:
             print(f"[vix] Validacion fallo: {exc}", file=sys.stderr)
 
     if hls_unique:
         print("[vix] Aviso: devolviendo candidata HLS no verificada", file=sys.stderr)
-        print(hls_unique[0])
-        return 0
+        return emit_result(hls_unique[0])
 
     if dash_seen or drm_seen:
         sys.exit("ERROR: ViX expuso solo DASH/DRM (sin HLS util para ffmpeg)")

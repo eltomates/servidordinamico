@@ -490,6 +490,41 @@
         </p>
       </section>
 
+        <section class="card" style="margin-top: 24px">
+          <h2>HDMI4 directo (capturadora USB 4)</h2>
+          <p>
+            La cuarta entrada HDMI‑USB se publica también como
+            <strong>HLS con vídeo+audio juntos</strong> servido por Apache.
+          </p>
+
+          <div class="video-wrapper">
+            <video
+              id="hdmi4-player"
+              class="stream"
+              controls
+              playsinline
+            ></video>
+          </div>
+
+          <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+            <button id="hdmi4-reload-btn" type="button">
+              Actualizar video HDMI4 (recargar segmentos)
+            </button>
+          </div>
+
+          <p class="note">
+            Si no ves ni oyes nada, comprueba que el comando ffmpeg HLS de
+            HDMI4 está en ejecución en el servidor.
+          </p>
+
+          <p class="note">
+            Para ver HDMI4 con <strong>vídeo+audio</strong> en VLC, abre esta URL
+            como medio de red:
+            <br />
+            <code class="vlc-url" data-path="/hls/hdmi4/index.m3u8"></code>
+          </p>
+        </section>
+
       
 
       <section class="card" style="margin-top: 24px">
@@ -1468,33 +1503,26 @@
           const video = document.getElementById(videoId);
           if (!video) return;
 
+          const withCacheBuster = (url) => {
+            const sep = url.indexOf("?") === -1 ? "?" : "&";
+            return url + sep + "r=" + Date.now();
+          };
+
+          if (videoId === "web6-player") {
+            video.muted = false;
+            video.volume = 1;
+            video.removeAttribute("muted");
+          }
+
           if (autoPlayMuted) {
             video.muted = true;
             video.setAttribute("muted", "");
             video.setAttribute("autoplay", "");
           }
 
-          if (video.canPlayType("application/vnd.apple.mpegurl")) {
-            // Soporte nativo HLS (Safari, etc.)
-            video.src = src;
-            video.load();
-            if (autoPlayMuted) {
-              video.play().catch(() => {});
-            }
-
-            hlsPlayers[videoId] = {
-              restart: () => {
-                try {
-                  video.pause();
-                } catch (e) {}
-                const cacheBuster = (src.indexOf("?") === -1 ? "?" : "&") + "r=" + Date.now();
-                video.src = src + cacheBuster;
-                video.load();
-              },
-            };
-          } else if (window.Hls && window.Hls.isSupported()) {
+          if (window.Hls && window.Hls.isSupported()) {
             let hls = new Hls(Object.assign({}, hlsConfig, hlsOverrides));
-            hls.loadSource(src);
+            hls.loadSource(withCacheBuster(src));
             hls.attachMedia(video);
 
             if (autoPlayMuted) {
@@ -1511,12 +1539,22 @@
                 hls.destroy();
               } catch (e) {}
               hls = new Hls(Object.assign({}, hlsConfig, hlsOverrides));
-              const cacheBuster = (src.indexOf("?") === -1 ? "?" : "&") + "r=" + Date.now();
-              hls.loadSource(src + cacheBuster);
+              hls.loadSource(withCacheBuster(src));
               hls.attachMedia(video);
             };
 
             hlsPlayers[videoId] = { restart };
+
+            // Si la lista quedó cerrada/caché, forzamos recarga del stream.
+            video.addEventListener("ended", () => {
+              restart();
+            });
+
+            hls.on(Hls.Events.ERROR, function (event, data) {
+              if (data && data.fatal) {
+                restart();
+              }
+            });
 
             if (autoRestart) {
 
@@ -1525,13 +1563,29 @@
                 restart();
               });
 
-              // En caso de error fatal de Hls.js, también reiniciamos.
-              hls.on(Hls.Events.ERROR, function (event, data) {
-                if (data && data.fatal) {
-                  restart();
-                }
-              });
+              // El autorestart específico queda para compatibilidad.
             }
+          } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+            // Soporte nativo HLS (Safari, etc.)
+            video.src = withCacheBuster(src);
+            video.load();
+            if (autoPlayMuted) {
+              video.play().catch(() => {});
+            }
+
+            hlsPlayers[videoId] = {
+              restart: () => {
+                try {
+                  video.pause();
+                } catch (e) {}
+                video.src = withCacheBuster(src);
+                video.load();
+              },
+            };
+
+            video.addEventListener("ended", () => {
+              restartHlsPlayer(videoId);
+            });
           } else {
             video.outerHTML =
               '<p class="note">Este navegador no soporta HLS. Usa VLC con la URL: <code>' +
@@ -2037,6 +2091,23 @@
           "/hls/hdmi3/index.m3u8",
           "/hls/hdmi3/index.m3u8"
         );
+
+          setupHlsPlayer(
+            "hdmi4-player",
+            "/hls/hdmi4/index.m3u8",
+            "/hls/hdmi4/index.m3u8",
+            {
+              autoPlayMuted: true,
+              autoRestart: true,
+            }
+          );
+
+          const hdmi4ReloadBtn = document.getElementById("hdmi4-reload-btn");
+          if (hdmi4ReloadBtn) {
+            hdmi4ReloadBtn.addEventListener("click", () => {
+              restartHlsPlayer("hdmi4-player");
+            });
+          }
 
         setupHlsPlayer(
           "web1-player",

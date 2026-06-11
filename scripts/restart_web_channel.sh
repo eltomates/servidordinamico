@@ -240,6 +240,11 @@ if run_orchestrator_restart "$channel" "$TMP_LOG"; then
     exit 0
   fi
 
+  if channel_is_stale "$channel"; then
+    echo "AVISO: $channel reiniciado, pero sigue sin actualizar segmentos (sin auto-refresh aplicable)."
+    exit 0
+  fi
+
   echo "OK: $channel reiniciado (sin auto-refresh aplicable)."
   exit 0
 fi

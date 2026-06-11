@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Manual Reparacion Canales HLS</title>
+<style>
+body { font-family: Calibri, Arial, sans-serif; line-height: 1.35; margin: 28px; }
+h1, h2 { color: #0b3a53; }
+code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+pre { background: #f4f4f4; padding: 10px; border-radius: 6px; white-space: pre-wrap; }
+.small { color: #555; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Manual de Reparacion de Canales HLS (web1-web16)</h1>
+<p class="small">Generado: 2026-06-09</p>
+<p>Este manual contiene los comandos mas usados para desbloquear, revisar errores, reiniciar y corregir fallas de audio o congelamiento.</p>
+
+<h2>1. Diagnostico rapido</h2>
+<pre>cat /var/www/html/logs/web_status.json
+cat /var/www/html/logs/web67_status.json
+ls -lah /var/www/html/hls/web6
+stat -c '%y %s %n' /var/www/html/hls/web6/index.m3u8
+pgrep -af 'ffmpeg_web6_proxy.sh|ffmpeg .*hls/web6'
+tail -n 120 /var/www/html/logs/ffmpeg_web6.log
+tail -n 200 /var/www/html/logs/monitor_web_proxies.log | grep -Ei 'web6|sin actualizar|degradado|error'</pre>
+
+<h2>2. Reinicio del canal o de todos</h2>
+<pre>bash /var/www/html/scripts/start_all_proxies.sh --channel web6
+bash /var/www/html/scripts/start_all_proxies.sh
+env QUERY_STRING='ch=web6' bash /var/www/html/scripts/restart_web_channel.sh
+bash /var/www/html/scripts/restart_web_proxies.sh</pre>
+
+<h2>3. Revisar URL y actualizar fuente del canal</h2>
+<pre>grep -n '^WEB6_URL=' /var/www/html/logs/web_sources.env /var/www/html/scripts/web_sources.env
+env QUERY_STRING='ch=web6&url=https%3A%2F%2Fpluto.tv%2Flatam%2Flive-tv%2F609059dc63be6e0007b4eca6' bash /var/www/html/scripts/update_web_channel.sh</pre>
+
+<h2>4. Diagnostico Pluto/Chromium</h2>
+<pre>timeout 35 env PW_HEADLESS=1 python3 /var/www/html/scripts/bin/resolve_pluto_chromium.py 'https://pluto.tv/latam/live-tv/609059dc63be6e0007b4eca6' 15
+
+timeout 20 env PW_HEADLESS=1 PLUTO_SKIP_VERIFY=1 python3 /var/www/html/scripts/bin/resolve_pluto_chromium.py 'https://pluto.tv/latam/live-tv/609059dc63be6e0007b4eca6' 10</pre>
+
+<h2>5. Verificar audio en entrada y salida</h2>
+<pre>resolved="$({ timeout 25 env PW_HEADLESS=1 PLUTO_SKIP_VERIFY=1 python3 /var/www/html/scripts/bin/resolve_pluto_chromium.py 'https://pluto.tv/latam/live-tv/609059dc63be6e0007b4eca6' 10 2>/dev/null | tail -n1; } 9>&-)"
+ffprobe -v error -show_streams -of compact=p=0:nk=1 "$resolved" | head -n 20
+
+latest_seg=$(ls -1t /var/www/html/hls/web6/seg_*.ts 2>/dev/null | head -n1)
+ffprobe -v error -show_streams -of compact=p=0:nk=1 "$latest_seg" | head -n 20
+
+ffprobe -v error -show_streams -of compact=p=0:nk=1 /var/www/html/hls/web6/index.m3u8 | head -n 20</pre>
+
+<h2>6. Corregir congelamiento (stale)</h2>
+<pre>pkill -f '/var/www/html/scripts/ffmpeg_web6_proxy.sh' || true
+pkill -f 'ffmpeg .*hls/web6' || true
+rm -f /var/www/html/logs/locks/ffmpeg_web6_proxy.sh.lock
+bash /var/www/html/scripts/start_all_proxies.sh --channel web6
+stat -c '%y %s %n' /var/www/html/hls/web6/index.m3u8</pre>
+
+<h2>7. Servicio de monitor</h2>
+<pre>systemctl is-active monitor-web-proxies.service
+systemctl restart monitor-web-proxies.service && systemctl is-active monitor-web-proxies.service
+tail -n 150 /var/www/html/logs/monitor_web_proxies.log</pre>
+
+<h2>8. Flujo recomendado de reparacion</h2>
+<ol>
+<li>Revisar estado JSON, logs y procesos.</li>
+<li>Reiniciar solo el canal afectado.</li>
+<li>Si sigue caido, validar URL configurada y resolvedor.</li>
+<li>Confirmar audio/video con ffprobe en entrada y salida.</li>
+<li>Si hay congelamiento, matar proceso, limpiar lock y reiniciar.</li>
+<li>Validar que index y segmentos tengan fecha nueva.</li>
+</ol>
+
+<h2>9. Comandos de emergencia (copiar/pegar)</h2>
+<pre># Reinicio rapido de web6
+bash /var/www/html/scripts/start_all_proxies.sh --channel web6
+
+# Ver proceso y log
+pgrep -af 'ffmpeg_web6_proxy.sh|ffmpeg .*hls/web6'
+tail -n 100 /var/www/html/logs/ffmpeg_web6.log
+
+# Verificar que index se actualiza
+stat -c '%y %s %n' /var/www/html/hls/web6/index.m3u8
+ls -1t /var/www/html/hls/web6/seg_*.ts | head -n 5</pre>
+
+<p class="small">Nota: El archivo tiene extension .doc y abre directamente en Microsoft Word.</p>
+</body>
+</html>

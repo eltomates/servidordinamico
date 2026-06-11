@@ -12,7 +12,7 @@ import urllib.request
 
 page_url = sys.argv[1] if len(sys.argv) > 1 else "https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32"
 timeout_sec = int(sys.argv[2]) if len(sys.argv) > 2 else 15
-headless_mode = os.environ.get("PW_HEADLESS", "0") != "0"
+headless_mode = os.environ.get("PW_HEADLESS", "1") != "0"
 skip_verify = os.environ.get("PLUTO_SKIP_VERIFY", "0") == "1"
 
 try:
@@ -37,10 +37,10 @@ def score_url(url: str) -> int:
         score += 80
     if "/playlist.m3u8" in url:
         score += 20
+    if "/master.m3u8" in url:
+        score += 10
     if "jwt=" in url:
         score += 20
-    if "master.m3u8" in url:
-        score -= 40
     return score
 
 
@@ -145,8 +145,11 @@ def main() -> int:
         except Exception:
             pass
 
-        page.wait_for_timeout(timeout_sec * 1000)
-        browser.close()
+        # Espera en pasos cortos para poder salir apenas se capture una playlist.
+        for _ in range(timeout_sec):
+            page.wait_for_timeout(1000)
+            if skip_verify and seen:
+                break
 
     candidates = sorted({url for url in seen}, key=score_url, reverse=True)
     if not candidates:
