@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 acquire_single_instance_lock "${BASH_SOURCE[0]}" || exit 0
 
 OUT="${OUT:-/var/www/html/hls/web13}"
-SRC_URL="${SRC_URL:-https://mdstrm.com/live-stream-playlist/62f2c855f7981b5a5a2d8763.m3u8}"
-YT_SEARCH_FALLBACK="${YT_SEARCH_FALLBACK:-https://www.youtube.com/watch?v=J44jNUs1tds}"
+SRC_URL="${SRC_URL:-https://www.radioformula.com.mx/en-vivo/teleformula}"
+YT_SEARCH_FALLBACK="${YT_SEARCH_FALLBACK:-https://mdstrm.com/live-stream-playlist/62f2c855f7981b5a5a2d8763.m3u8}"
 YT_FORMAT_SELECTOR="${YT_FORMAT_SELECTOR:-bv*[vcodec^=avc1][height<=720][ext=mp4]+ba[ext=mp4]/bv*[vcodec^=avc1][ext=mp4]+ba[ext=mp4]/b}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-420}"
 FFMPEG_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0}"
@@ -140,7 +140,11 @@ while true; do
     sleep 5
     if ! kill -0 "$ffmpeg_pid" 2>/dev/null && [[ "$SRC_URL" == *radioformula.com.mx*teleformula* ]]; then
       echo "[ffmpeg_web13_proxy] Falló la URL original; probando fallback $YT_SEARCH_FALLBACK" >&2
-      run_ffmpeg_from_ytdlp "$YT_SEARCH_FALLBACK" &
+      if is_direct_stream_url "$YT_SEARCH_FALLBACK"; then
+        run_ffmpeg_from_direct_url "$YT_SEARCH_FALLBACK"
+      else
+        run_ffmpeg_from_ytdlp "$YT_SEARCH_FALLBACK" &
+      fi
       ffmpeg_pid=$!
     fi
   fi

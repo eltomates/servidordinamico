@@ -594,6 +594,7 @@ raise SystemExit(0)
 PY
 }
 
+
 # Bucle de reconexión automática en caso de corte del origen o fallo de ffmpeg
 while true; do
   set +e

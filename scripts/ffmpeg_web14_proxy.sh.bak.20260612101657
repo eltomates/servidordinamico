@@ -30,21 +30,18 @@ SRC_URL="${SRC_URL:-${CONFIG_SRC_URL:-https://pluto.tv/latam/live-tv/5ddd7cb2cbb
 YT_FORMAT_SELECTOR="${YT_FORMAT_SELECTOR:-bv*[vcodec^=avc1][height<=720][ext=mp4]+ba[ext=mp4]/bv*[vcodec^=avc1][ext=mp4]+ba[ext=mp4]/b}"
 PLUTO_TARGET_BANDWIDTH="${PLUTO_TARGET_BANDWIDTH:-1577180}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-45}"
-WATCHDOG_INTERVAL_SECONDS="${WATCHDOG_INTERVAL_SECONDS:-15}"
+WATCHDOG_INTERVAL_SECONDS="${WATCHDOG_INTERVAL_SECONDS:-10}"
 FFMPEG_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0}"
 USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-1}"
 PLUTO_CHROMIUM_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_TIMEOUT_SECONDS:-15}"
-PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS:-35}"
-PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-0}"
+PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS="${PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS:-210}"
+PLUTO_REQUIRE_CHROMIUM="${PLUTO_REQUIRE_CHROMIUM:-1}"
 PLUTO_SKIP_VERIFY="${PLUTO_SKIP_VERIFY:-1}"
-RESOLVE_TIMEOUT_SECONDS="${RESOLVE_TIMEOUT_SECONDS:-45}"
-LAST_RESOLVED_FILE="${LAST_RESOLVED_FILE:-/var/www/html/logs/web14_last_resolved.url}"
-USE_LAST_RESOLVED_ON_START="${USE_LAST_RESOLVED_ON_START:-1}"
-KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
-HLS_TIME="${HLS_TIME:-4}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
-HLS_DELETE_THRESHOLD="${HLS_DELETE_THRESHOLD:-2}"
-FFMPEG_REFERER="${FFMPEG_REFERER:-https://pluto.tv/}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-12}"
+PLUTO_CHROMIUM_ATTEMPTS="${PLUTO_CHROMIUM_ATTEMPTS:-3}"
+FFMPEG_RW_TIMEOUT_US="${FFMPEG_RW_TIMEOUT_US:-15000000}"
+FFMPEG_HTTP_PERSISTENT="${FFMPEG_HTTP_PERSISTENT:-0}"
+FORCE_KILL_GRACE_SECONDS="${FORCE_KILL_GRACE_SECONDS:-8}"
 
 mkdir -p "$OUT"
 
@@ -64,6 +61,7 @@ resolve_pluto_source_url() {
   local chromium_resolver="$SCRIPT_DIR/bin/resolve_pluto_chromium.py"
   local chromium_url=""
   local chromium_timeout_cmd=( )
+  local attempt=1
 
   if command -v timeout >/dev/null 2>&1; then
     chromium_timeout_cmd=(timeout "$PLUTO_CHROMIUM_HARD_TIMEOUT_SECONDS")
@@ -71,12 +69,17 @@ resolve_pluto_source_url() {
 
   if [ "$USE_CHROMIUM_RESOLVER" = "1" ] && [ -f "$chromium_resolver" ] && command -v python3 >/dev/null 2>&1; then
     # En este host el modo headless directo es mas estable que xvfb-run.
-    chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY="$PLUTO_SKIP_VERIFY" python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
+    while [ "$attempt" -le "$PLUTO_CHROMIUM_ATTEMPTS" ]; do
+      chromium_url="$({ "${chromium_timeout_cmd[@]}" env PW_HEADLESS=1 PLUTO_SKIP_VERIFY="$PLUTO_SKIP_VERIFY" python3 "$chromium_resolver" "$page_url" "$PLUTO_CHROMIUM_TIMEOUT_SECONDS" | tail -n1; } 9>&-)"
 
-    if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
-      printf '%s\n' "$chromium_url"
-      return 0
-    fi
+      if [ -n "$chromium_url" ] && printf '%s' "$chromium_url" | grep -Eq '^https?://'; then
+        printf '%s\n' "$chromium_url"
+        return 0
+      fi
+
+      attempt=$(( attempt + 1 ))
+      sleep 2
+    done
   fi
 
   if [ "$PLUTO_REQUIRE_CHROMIUM" = "1" ]; then
@@ -182,44 +185,6 @@ resolve_source_url() {
   esac
 }
 
-resolve_source_url_with_timeout() {
-  local src_url="$1"
-  local tmp_file
-  local resolve_pid
-  local waited=0
-  local rc=1
-
-  tmp_file="$(mktemp /tmp/web14_resolve.XXXXXX)" || return 1
-
-  ( resolve_source_url "$src_url" ) >"$tmp_file" &
-  resolve_pid=$!
-
-  while kill -0 "$resolve_pid" 2>/dev/null; do
-    if [ "$waited" -ge "$RESOLVE_TIMEOUT_SECONDS" ]; then
-      echo "[ffmpeg_web14_proxy] Resolucion de origen tardo mas de ${RESOLVE_TIMEOUT_SECONDS}s; cancelando intento." >&2
-      pkill -TERM -P "$resolve_pid" 2>/dev/null || true
-      kill -TERM "$resolve_pid" 2>/dev/null || true
-      sleep 2
-      pkill -KILL -P "$resolve_pid" 2>/dev/null || true
-      kill -KILL "$resolve_pid" 2>/dev/null || true
-      wait "$resolve_pid" 2>/dev/null || true
-      rm -f "$tmp_file"
-      return 124
-    fi
-
-    sleep 1
-    waited=$(( waited + 1 ))
-  done
-
-  wait "$resolve_pid"
-  rc=$?
-  if [ "$rc" -eq 0 ]; then
-    cat "$tmp_file"
-  fi
-  rm -f "$tmp_file"
-  return "$rc"
-}
-
 run_ffmpeg_from_direct_url() {
   local input_url="$1"
 
@@ -227,48 +192,37 @@ run_ffmpeg_from_direct_url() {
 
   ffmpeg \
     -loglevel info \
-    -extension_picky 0 \
-    -allowed_extensions ALL \
-    -allowed_segment_extensions ALL \
-    -rw_timeout 15000000 \
     -fflags +discardcorrupt+genpts \
     -err_detect ignore_err \
+    -rw_timeout "$FFMPEG_RW_TIMEOUT_US" \
+    -http_persistent "$FFMPEG_HTTP_PERSISTENT" \
     -reconnect 1 \
     -reconnect_streamed 1 \
     -reconnect_on_network_error 1 \
     -reconnect_on_http_error 4xx,5xx \
-    -reconnect_delay_max 10 \
-    -http_persistent 0 \
-    -referer "$FFMPEG_REFERER" \
+    -reconnect_delay_max 5 \
     -user_agent "$FFMPEG_USER_AGENT" \
-    -re \
     -i "$input_url" \
-    -map 0:v:0 \
-    -map 0:a:0 \
-    -vf "scale=-2:720:flags=bicubic" \
     -c:v libx264 \
-    -preset superfast \
+    -preset veryfast \
     -tune zerolatency \
-    -profile:v high \
-    -level 4.0 \
-    -fps_mode:v cfr \
-    -b:v 2500k \
-    -maxrate 3200k \
-    -bufsize 6400k \
+    -profile:v baseline \
+    -level 3.1 \
+    -r 20 \
+    -b:v 800k \
+    -maxrate 900k \
+    -bufsize 2400k \
     -max_muxing_queue_size 2048 \
-    -g 60 \
-    -keyint_min 60 \
-    -sc_threshold 0 \
+    -g 40 \
+    -keyint_min 40 \
     -c:a aac \
     -ac 2 \
     -b:a 128k \
-    -af "aresample=async=1:first_pts=0" \
     -f hls \
-    -hls_time "$HLS_TIME" \
+    -hls_time 4 \
     -hls_list_size "$HLS_LIST_SIZE" \
-    -hls_delete_threshold "$HLS_DELETE_THRESHOLD" \
     -start_number "$START_NUMBER" \
-    -hls_flags delete_segments+independent_segments+temp_file+omit_endlist \
+    -hls_flags delete_segments+program_date_time+independent_segments \
     -hls_segment_filename "$OUT/seg_%06d.ts" \
     "$OUT/index.m3u8" &
 }
@@ -307,44 +261,27 @@ run_ffmpeg_from_ytdlp() {
       -b:a 128k \
       -f hls \
       -hls_time 4 \
-      -hls_list_size "$HLS_LIST_SIZE" \
+      -hls_list_size 6 \
       -start_number "$START_NUMBER" \
-      -hls_flags delete_segments+program_date_time+independent_segments+temp_file+omit_endlist \
+      -hls_flags delete_segments+program_date_time+independent_segments \
       -hls_segment_filename "$OUT/seg_%06d.ts" \
       "$OUT/index.m3u8"
 }
 
-LAST_RESOLVED_BOOT_USED=0
-
 while true; do
   set +e
 
-  # Mantener una ventana previa evita dejar el canal sin playlist durante
-  # resoluciones/reintentos de Pluto y le da mas margen al reproductor.
-  trim_hls_segments "$OUT" "$KEEP_SEGMENTS"
-
   START_NUMBER="$(date +%s)"
-  if [ "$USE_LAST_RESOLVED_ON_START" = "1" ] && [ "$LAST_RESOLVED_BOOT_USED" -eq 0 ] && [ -s "$LAST_RESOLVED_FILE" ]; then
-    RESOLVED_SRC_URL="$(cat "$LAST_RESOLVED_FILE")"
-    echo "[ffmpeg_web14_proxy] Usando ultima URL HLS buena para arrancar rapido." >&2
-    LAST_RESOLVED_BOOT_USED=1
-    resolve_rc=0
-  else
-    RESOLVED_SRC_URL="$(resolve_source_url_with_timeout "$SRC_URL")"
-    resolve_rc=$?
-  fi
+  RESOLVED_SRC_URL="$(resolve_source_url "$SRC_URL")"
 
-  if { [ "$resolve_rc" -ne 0 ] || [ -z "$RESOLVED_SRC_URL" ]; } && [ -s "$LAST_RESOLVED_FILE" ]; then
-    RESOLVED_SRC_URL="$(cat "$LAST_RESOLVED_FILE")"
-    echo "[ffmpeg_web14_proxy] Usando ultima URL HLS buena tras fallo de resolucion." >&2
-    resolve_rc=0
-  fi
+  if [ $? -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then
+    clear_published_output
 
-  if [ "$resolve_rc" -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL" ]; then
-    printf '%s\n' "$RESOLVED_SRC_URL" >"$LAST_RESOLVED_FILE" 2>/dev/null || true
     run_ffmpeg_from_direct_url "$RESOLVED_SRC_URL"
     ffmpeg_pid=$!
   else
+    clear_published_output
+
     echo "[ffmpeg_web14_proxy] No se pudo resolver una URL reproducible para $SRC_URL" >&2
 
     case "$SRC_URL" in
@@ -369,13 +306,6 @@ while true; do
   while kill -0 "$ffmpeg_pid" 2>/dev/null; do
     sleep "$WATCHDOG_INTERVAL_SECONDS"
 
-    if [ -f "$OUT/index.m3u8" ] && grep -q '^#EXT-X-ENDLIST' "$OUT/index.m3u8" 2>/dev/null; then
-      echo "[ffmpeg_web14_proxy] index.m3u8 contiene #EXT-X-ENDLIST, reiniciando ffmpeg ($ffmpeg_pid)" >&2
-      kill "$ffmpeg_pid" 2>/dev/null
-      sleep 2
-      break
-    fi
-
     if [ -f "$OUT/index.m3u8" ]; then
       current_mtime="$(stat -c %Y "$OUT/index.m3u8")"
       if [ "$current_mtime" != "$last_mtime" ]; then
@@ -390,13 +320,24 @@ while true; do
     if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
       echo "[ffmpeg_web14_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
       kill "$ffmpeg_pid" 2>/dev/null
-      sleep 2
+      sleep "$FORCE_KILL_GRACE_SECONDS"
+
+      if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+        echo "[ffmpeg_web14_proxy] ffmpeg sigue vivo tras SIGTERM; forzando SIGKILL ($ffmpeg_pid)" >&2
+        kill -9 "$ffmpeg_pid" 2>/dev/null || true
+      fi
+
       break
     fi
   done
 
-  wait "$ffmpeg_pid"
-  rc=$?
+  rc=0
+  if kill -0 "$ffmpeg_pid" 2>/dev/null; then
+    wait "$ffmpeg_pid"
+    rc=$?
+  else
+    wait "$ffmpeg_pid" 2>/dev/null || rc=$?
+  fi
   set -e
 
   echo "[ffmpeg_web14_proxy] ffmpeg salió con código $rc. Reintentando en 5 segundos..." >&2

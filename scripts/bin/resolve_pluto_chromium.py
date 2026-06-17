@@ -8,12 +8,14 @@ Salida: URL de playlist HLS en stdout, diagnóstico en stderr.
 
 import os
 import sys
+import re
 import urllib.request
 
 page_url = sys.argv[1] if len(sys.argv) > 1 else "https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32"
 timeout_sec = int(sys.argv[2]) if len(sys.argv) > 2 else 15
 headless_mode = os.environ.get("PW_HEADLESS", "1") != "0"
 skip_verify = os.environ.get("PLUTO_SKIP_VERIFY", "0") == "1"
+target_bandwidth = int(os.environ.get("PLUTO_TARGET_BANDWIDTH", "0") or "0")
 
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -41,6 +43,11 @@ def score_url(url: str) -> int:
         score += 10
     if "jwt=" in url:
         score += 20
+    if target_bandwidth > 0:
+        match = re.search(r"/channel/[a-f0-9]{24}/(\d+)/playlist\.m3u8", url)
+        if match:
+            bandwidth = int(match.group(1))
+            score -= min(abs(bandwidth - target_bandwidth) // 10000, 300)
     return score
 
 

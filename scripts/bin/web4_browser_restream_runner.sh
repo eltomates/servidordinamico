@@ -21,10 +21,22 @@ CAPTURE_HEIGHT="$HEIGHT"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAYER_SCRIPT="$SCRIPT_DIR/browser_player_keepalive.py"
 RESOLVER_SCRIPT="$SCRIPT_DIR/resolve_vix_chromium.py"
+PLUTO_RESOLVER_SCRIPT="$SCRIPT_DIR/resolve_pluto_chromium.py"
 CACHED_AUDIO_URL_FILE="/tmp/web4_audio_url.txt"
+PLUTO_CACHED_AUDIO_URL_FILE="/tmp/web4_pluto_audio_url.txt"
 WEB4_USE_DIRECT_AUDIO="${WEB4_USE_DIRECT_AUDIO:-1}"
 WEB4_AUDIO_RESOLUTION="${WEB4_AUDIO_RESOLUTION:-640x360}"
 WEB4_AUDIO_DELAY_MS="${WEB4_AUDIO_DELAY_MS:-500}"
+WEB4_DIRECT_AUDIO_URL="${WEB4_DIRECT_AUDIO_URL:-}"
+WEB4_OUTPUT_SCALE_HEIGHT="${WEB4_OUTPUT_SCALE_HEIGHT:-540}"
+WEB4_OUTPUT_SCALE_FLAGS="${WEB4_OUTPUT_SCALE_FLAGS:-bicubic}"
+WEB4_OUTPUT_PRESET="${WEB4_OUTPUT_PRESET:-ultrafast}"
+WEB4_OUTPUT_PROFILE="${WEB4_OUTPUT_PROFILE:-baseline}"
+WEB4_OUTPUT_LEVEL="${WEB4_OUTPUT_LEVEL:-3.1}"
+WEB4_OUTPUT_BITRATE="${WEB4_OUTPUT_BITRATE:-1200k}"
+WEB4_OUTPUT_MAXRATE="${WEB4_OUTPUT_MAXRATE:-1600k}"
+WEB4_OUTPUT_BUFSIZE="${WEB4_OUTPUT_BUFSIZE:-3200k}"
+WEB4_OUTPUT_GOP="${WEB4_OUTPUT_GOP:-40}"
 
 if [ "$TRIM_TOP" -gt 0 ] 2>/dev/null; then
   CAPTURE_HEIGHT="$WINDOW_HEIGHT"
@@ -92,7 +104,7 @@ resolve_audio_variant_url() {
 
 sleep "${WEB4_BROWSER_BOOT_SECONDS:-8}"
 
-AUDIO_URL=""
+AUDIO_URL="$WEB4_DIRECT_AUDIO_URL"
 if [ "$WEB4_USE_DIRECT_AUDIO" = "1" ] && [[ "$PAGE_URL" == https://www.canela.tv/* || "$PAGE_URL" == https://canela.tv/* ]]; then
   if [ -f "$CACHED_AUDIO_URL_FILE" ]; then
     AUDIO_URL="$(tail -n1 "$CACHED_AUDIO_URL_FILE" 2>/dev/null || true)"
@@ -113,6 +125,31 @@ if [ "$WEB4_USE_DIRECT_AUDIO" = "1" ] && [[ "$PAGE_URL" == https://www.canela.tv
         resolved_url="$(timeout 20s python3 "$RESOLVER_SCRIPT" "$PAGE_URL" 20 2>/dev/null | tail -n1 || true)"
         if [ -n "$resolved_url" ]; then
           printf '%s\n' "$resolved_url" > "$CACHED_AUDIO_URL_FILE" 2>/dev/null || true
+        fi
+      ) >/dev/null 2>&1 &
+    fi
+  fi
+fi
+
+if [ -z "$AUDIO_URL" ] && [ "$WEB4_USE_DIRECT_AUDIO" = "1" ] && [[ "$PAGE_URL" == https://pluto.tv/*/live-tv/* || "$PAGE_URL" == https://*.pluto.tv/*/live-tv/* ]]; then
+  if [ -f "$PLUTO_CACHED_AUDIO_URL_FILE" ]; then
+    AUDIO_URL="$(tail -n1 "$PLUTO_CACHED_AUDIO_URL_FILE" 2>/dev/null || true)"
+  fi
+
+  if [ -f "$PLUTO_RESOLVER_SCRIPT" ]; then
+    if [ -z "$AUDIO_URL" ]; then
+      resolved_once="$(timeout 20s env PW_HEADLESS=1 PLUTO_SKIP_VERIFY=1 python3 "$PLUTO_RESOLVER_SCRIPT" "$PAGE_URL" 15 2>/dev/null | tail -n1 || true)"
+      if [ -n "$resolved_once" ]; then
+        AUDIO_URL="$resolved_once"
+        printf '%s\n' "$resolved_once" > "$PLUTO_CACHED_AUDIO_URL_FILE" 2>/dev/null || true
+      fi
+    fi
+
+    if ! pgrep -af "resolve_pluto_chromium.py $PAGE_URL" >/dev/null 2>&1; then
+      (
+        resolved_url="$(timeout 20s env PW_HEADLESS=1 PLUTO_SKIP_VERIFY=1 python3 "$PLUTO_RESOLVER_SCRIPT" "$PAGE_URL" 15 2>/dev/null | tail -n1 || true)"
+        if [ -n "$resolved_url" ]; then
+          printf '%s\n' "$resolved_url" > "$PLUTO_CACHED_AUDIO_URL_FILE" 2>/dev/null || true
         fi
       ) >/dev/null 2>&1 &
     fi
@@ -141,13 +178,13 @@ FFMPEG_INPUT_ARGS=(
 if [ -n "$AUDIO_URL" ]; then
   echo "[web4_browser_restream] Usando audio directo desde HLS resuelto." >&2
   FFMPEG_INPUT_ARGS+=(
-    -re
     -allowed_extensions ALL
     -allowed_segment_extensions ALL
     -extension_picky 0
-    -fflags nobuffer
-    -probesize 32768
-    -analyzeduration 0
+    -fflags +discardcorrupt+genpts
+    -err_detect ignore_err
+    -probesize 1000000
+    -analyzeduration 1000000
     -rw_timeout 15000000
     -thread_queue_size 512
     -i "$AUDIO_URL"
@@ -163,21 +200,21 @@ fi
 FFMPEG_OUTPUT_ARGS=(
   -map 0:v:0
   -map 1:a:0
-  -vf "scale=-2:720:flags=bicubic,fps=${FPS},setpts=N/(${FPS}*TB)"
+  -vf "scale=-2:${WEB4_OUTPUT_SCALE_HEIGHT}:flags=${WEB4_OUTPUT_SCALE_FLAGS},fps=${FPS},setpts=N/(${FPS}*TB)"
   -af "asetpts=PTS-STARTPTS,adelay=${WEB4_AUDIO_DELAY_MS}:all=1,aresample=async=1:first_pts=0"
   -r "$FPS"
   -fps_mode cfr
   -c:v libx264
-  -preset superfast
+  -preset "$WEB4_OUTPUT_PRESET"
   -tune zerolatency
-  -profile:v high
-  -level 4.0
+  -profile:v "$WEB4_OUTPUT_PROFILE"
+  -level "$WEB4_OUTPUT_LEVEL"
   -pix_fmt yuv420p
-  -b:v 2500k
-  -maxrate 3200k
-  -bufsize 6400k
-  -g 60
-  -keyint_min 60
+  -b:v "$WEB4_OUTPUT_BITRATE"
+  -maxrate "$WEB4_OUTPUT_MAXRATE"
+  -bufsize "$WEB4_OUTPUT_BUFSIZE"
+  -g "$WEB4_OUTPUT_GOP"
+  -keyint_min "$WEB4_OUTPUT_GOP"
   -sc_threshold 0
   -c:a aac
   -ac 2
@@ -199,21 +236,21 @@ if [ "$TRIM_TOP" -gt 0 ] 2>/dev/null; then
   FFMPEG_OUTPUT_ARGS=(
     -map 0:v:0
     -map 1:a:0
-    -vf "crop=in_w:in_h-${TRIM_TOP}:0:${TRIM_TOP},scale=-2:720:flags=bicubic,fps=${FPS},setpts=N/(${FPS}*TB)"
+    -vf "crop=in_w:in_h-${TRIM_TOP}:0:${TRIM_TOP},scale=-2:${WEB4_OUTPUT_SCALE_HEIGHT}:flags=${WEB4_OUTPUT_SCALE_FLAGS},fps=${FPS},setpts=N/(${FPS}*TB)"
     -af "asetpts=PTS-STARTPTS,adelay=${WEB4_AUDIO_DELAY_MS}:all=1,aresample=async=1:first_pts=0"
     -r "$FPS"
     -fps_mode cfr
     -c:v libx264
-    -preset superfast
+    -preset "$WEB4_OUTPUT_PRESET"
     -tune zerolatency
-    -profile:v high
-    -level 4.0
+    -profile:v "$WEB4_OUTPUT_PROFILE"
+    -level "$WEB4_OUTPUT_LEVEL"
     -pix_fmt yuv420p
-    -b:v 2500k
-    -maxrate 3200k
-    -bufsize 6400k
-    -g 60
-    -keyint_min 60
+    -b:v "$WEB4_OUTPUT_BITRATE"
+    -maxrate "$WEB4_OUTPUT_MAXRATE"
+    -bufsize "$WEB4_OUTPUT_BUFSIZE"
+    -g "$WEB4_OUTPUT_GOP"
+    -keyint_min "$WEB4_OUTPUT_GOP"
     -sc_threshold 0
     -c:a aac
     -ac 2

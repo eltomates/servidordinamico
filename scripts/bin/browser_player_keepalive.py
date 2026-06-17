@@ -5,6 +5,7 @@ Se usa junto con x11grab para restream de navegador real.
 """
 
 import sys
+import time
 from typing import Iterable
 
 try:
@@ -47,6 +48,11 @@ def poke_player(page, width: int, height: int) -> None:
         pass
 
     try:
+        page.keyboard.press("F11")
+    except Exception:
+        pass
+
+    try:
         page.evaluate(
             """
             () => {
@@ -57,6 +63,8 @@ def poke_player(page, width: int, height: int) -> None:
                     st.textContent = `
                       html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #000 !important; }
                       header, nav, [role="banner"], .goog-te-banner-frame, .skiptranslate, .vjs-control-bar { display: none !important; }
+                      video::-webkit-media-controls { display: none !important; }
+                      video::-webkit-media-controls-enclosure { display: none !important; }
                       video { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; background: #000 !important; z-index: 2147483647 !important; }
                     `;
                     document.documentElement.appendChild(st);
@@ -66,7 +74,7 @@ def poke_player(page, width: int, height: int) -> None:
                 if (!video) return;
                 try { video.muted = false; } catch (e) {}
                 try { video.play(); } catch (e) {}
-                try { video.setAttribute('controls', ''); video.removeAttribute('controls'); } catch (e) {}
+                try { video.controls = false; video.removeAttribute('controls'); } catch (e) {}
                 try {
                     if (document.fullscreenElement !== video) {
                         video.requestFullscreen().catch(() => {});
@@ -75,6 +83,11 @@ def poke_player(page, width: int, height: int) -> None:
             }
             """
         )
+    except Exception:
+        pass
+
+    try:
+        page.mouse.move(width - 5, 5)
     except Exception:
         pass
 
@@ -125,26 +138,89 @@ def main() -> int:
         page.wait_for_timeout(2500)
         poke_player(page, width, height)
 
+        last_video_time = None
+        last_video_progress_at = time.monotonic()
+        last_frame_count = None
+        last_frame_progress_at = time.monotonic()
+
         while True:
             page.wait_for_timeout(2500)
             try:
-                state = page.evaluate(
+                state, current_time, frame_count, ready_state = page.evaluate(
                     """
                     () => {
                         const v = document.querySelector('video');
-                        if (!v) return 'no-video';
-                        if (v.ended) return 'ended';
-                        if (v.paused) return 'paused';
-                        if (v.readyState < 2) return 'buffering';
-                        return 'playing';
+                        if (!v) return ['no-video', null, null, 0];
+
+                        let decodedFrames = null;
+                        try {
+                            if (typeof v.getVideoPlaybackQuality === 'function') {
+                                const quality = v.getVideoPlaybackQuality();
+                                if (quality && Number.isFinite(quality.totalVideoFrames)) {
+                                    decodedFrames = quality.totalVideoFrames;
+                                }
+                            }
+                        } catch (e) {}
+
+                        if (decodedFrames == null) {
+                            const webkitFrames = v.webkitDecodedFrameCount;
+                            if (Number.isFinite(webkitFrames)) {
+                                decodedFrames = webkitFrames;
+                            }
+                        }
+
+                        if (v.ended) return ['ended', v.currentTime || 0, decodedFrames, v.readyState || 0];
+                        if (v.paused) return ['paused', v.currentTime || 0, decodedFrames, v.readyState || 0];
+                        if (v.readyState < 2) return ['buffering', v.currentTime || 0, decodedFrames, v.readyState || 0];
+                        return ['playing', v.currentTime || 0, decodedFrames, v.readyState || 0];
                     }
                     """
                 )
             except Exception:
                 state = "unknown"
+                current_time = None
+                frame_count = None
+                ready_state = 0
+
+            if isinstance(current_time, (int, float)):
+                if last_video_time is None or current_time > (last_video_time + 0.4):
+                    last_video_time = current_time
+                    last_video_progress_at = time.monotonic()
+
+            if isinstance(frame_count, (int, float)):
+                if last_frame_count is None or frame_count > last_frame_count:
+                    last_frame_count = frame_count
+                    last_frame_progress_at = time.monotonic()
+
+            stalled_for = time.monotonic() - last_video_progress_at
+            frame_stalled_for = time.monotonic() - last_frame_progress_at
 
             if state in ("paused", "buffering", "ended", "no-video", "unknown"):
                 poke_player(page, width, height)
+
+            decode_stalled = isinstance(frame_count, (int, float)) and ready_state >= 2 and frame_stalled_for >= 10
+            time_stalled = stalled_for >= 12
+
+            if state == "playing" and (time_stalled or decode_stalled):
+                reason = []
+                if time_stalled:
+                    reason.append(f"tiempo {stalled_for:.1f}s")
+                if decode_stalled:
+                    reason.append(f"frames {frame_stalled_for:.1f}s")
+                print(
+                    f"[browser_keepalive] Video atascado ({', '.join(reason)}; readyState={ready_state}; currentTime={current_time}; frames={frame_count}), recargando",
+                    file=sys.stderr,
+                )
+                try:
+                    page.reload(wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
+                poke_player(page, width, height)
+                last_video_time = None
+                last_video_progress_at = time.monotonic()
+                last_frame_count = None
+                last_frame_progress_at = time.monotonic()
 
             # Si la pagina se queda sin video por largo tiempo, recarga.
             if state == "no-video":
