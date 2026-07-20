@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Proxy HLS desde una URL remota IPTV a un HLS local servido por Apache.
-# Entrada:  http://tv.proyectox.vip:8080/ELLtdmaiz204fj/ScMZEQzYga/9604
+# Entrada:  http://tecnotv.club/gnwa/phpcode/lista3.php?c=8&token=tecnotokenplustv230516F&f=.m3u8
 # Salida:   /var/www/html/hls/web8/index.m3u8 (accesible como /hls/web8/index.m3u8)
 
 set -e
@@ -12,11 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 acquire_single_instance_lock "${BASH_SOURCE[0]}" || exit 0
 
 OUT="${OUT:-/var/www/html/hls/web8}"
-SRC_URL="${SRC_URL:-https://streaming.alwaysdata.net/tudn.php}"
+SRC_URL="${SRC_URL:-http://tecnotv.club/gnwa/phpcode/lista3.php?c=8&token=tecnotokenplustv230516F&f=.m3u8}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-120}"
-VIDEO_MAP="${VIDEO_MAP:-0:8}"
+VIDEO_MAP="${VIDEO_MAP:-0:v:0}"
 
 mkdir -p "$OUT"
 
@@ -40,6 +40,9 @@ while true; do
     -reconnect_on_network_error 1 \
     -reconnect_on_http_error 4xx,5xx \
     -reconnect_delay_max 10 \
+    -extension_picky 0 \
+    -allowed_extensions ALL \
+    -allowed_segment_extensions ALL \
     -i "$SRC_URL" \
     -map "$VIDEO_MAP" \
     -map 0:a:0 \
@@ -57,9 +60,9 @@ while true; do
     -sc_threshold 0 \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
     -f hls \
-    -hls_time 6 \
+    -hls_time 4 \
     -hls_list_size "$HLS_LIST_SIZE" \
     -start_number "$START_NUMBER" \
     -hls_flags delete_segments+program_date_time+independent_segments \

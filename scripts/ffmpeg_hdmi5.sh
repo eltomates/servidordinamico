@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-OUT="${OUT:-/var/www/html/hls/hdmi4}"
-# Cuarto dongle USB: prioriza ruta histórica, pero se autodetecta si cambió de puerto.
-VIDEO_DEV="${VIDEO_DEV:-/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.2:1.0-video-index0}"
-# Audio estable del cuarto dongle por nombre ALSA (card 3).
-AUDIO_DEV="${AUDIO_DEV:-plughw:CARD=U0x345f0x2109_4,DEV=0}"
+OUT="${OUT:-/var/www/html/hls/hdmi5}"
+# Quinto dongle USB: puerto usb-0:6.4, índice 0 (ruta estable).
+VIDEO_DEV="${VIDEO_DEV:-/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.4:1.0-video-index0}"
+# Audio estable del quinto dongle por nombre ALSA.
+AUDIO_DEV="${AUDIO_DEV:-plughw:CARD=U0x345f0x2109_3,DEV=0}"
 INPUT_FPS="${INPUT_FPS:-25}"
 OUTPUT_480_FPS="${OUTPUT_480_FPS:-$INPUT_FPS}"
 OUTPUT_360_FPS="${OUTPUT_360_FPS:-20}"
@@ -12,36 +12,14 @@ OUTPUT_180_FPS="${OUTPUT_180_FPS:-15}"
 GOP_SIZE="${GOP_SIZE:-100}"
 X264_PRESET="${X264_PRESET:-ultrafast}"
 
-pick_video_dev() {
-  local candidate
-
-  if [ -e "$VIDEO_DEV" ]; then
-    echo "$VIDEO_DEV"
-    return 0
-  fi
-
-  # Excluir puertos ya asignados a otros HDMI.
-  for candidate in /dev/v4l/by-path/*-video-index0; do
-    [ -e "$candidate" ] || continue
-    case "$candidate" in
-      *-usb-0:8:1.0-video-index0|*-usb-0:9.4:1.0-video-index0|*-usb-0:10:1.0-video-index0|*-usb-0:11:1.0-video-index0|*-usbv2-0:8:1.0-video-index0|*-usbv2-0:9.4:1.0-video-index0|*-usbv2-0:10:1.0-video-index0|*-usbv2-0:11:1.0-video-index0)
-        continue
-        ;;
-    esac
-    echo "$candidate"
-    return 0
-  done
-
-  # Si no hay candidato libre, reportar claramente para diagnóstico.
-  echo "[ffmpeg_hdmi4] ERROR: no se encontró dispositivo de video para hdmi4." >&2
-  echo "[ffmpeg_hdmi4] Esperado por defecto: $VIDEO_DEV" >&2
-  ls -1 /dev/v4l/by-path/*-video-index0 2>/dev/null >&2 || true
-  return 1
-}
-
-VIDEO_DEV="$(pick_video_dev)" || exit 1
-
-mkdir -p "$OUT/480p" "$OUT/360p" "$OUT/180p"
+LOCK_DIR="/var/www/html/logs/locks"
+LOCK_FILE="$LOCK_DIR/hdmi5_ffmpeg.lock"
+mkdir -p "$OUT/480p" "$OUT/360p" "$OUT/180p" "$LOCK_DIR"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "[ffmpeg_hdmi5] ya hay otra instancia activa; saliendo." >&2
+  exit 0
+fi
 
 exec ffmpeg \
   -thread_queue_size 2048 \
