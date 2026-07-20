@@ -17,6 +17,7 @@ fi
 LOG_DIR="/var/www/html/logs"
 ALARM_LOG="$LOG_DIR/web_alarm.log"
 STATUS_FILE="$LOG_DIR/web_alarm_status.json"
+EMAIL_THROTTLE_FILE="$LOG_DIR/web_alarm_email_throttle.json"
 EMAIL_ENV_PRIMARY="$LOG_DIR/web_alarm_email.env"
 EMAIL_ENV_FALLBACK="/var/www/html/scripts/web_alarm_email.env"
 
@@ -26,6 +27,26 @@ NOW_EPOCH="$(date +%s)"
 NOW_HUMAN="$(date '+%F %T')"
 
 echo "[web_alarm] $NOW_HUMAN channel=$CHANNEL level=$LEVEL msg=$MESSAGE" >> "$ALARM_LOG"
+
+is_recoverable_guardian_flap() {
+    if [ "$LEVEL" != "ALARM" ]; then
+        return 1
+    fi
+
+    case "$CHANNEL:$MESSAGE" in
+        web12:"web12 congelado ("*|web14:"web14 congelado ("*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+if is_recoverable_guardian_flap; then
+    echo "[web_alarm] $NOW_HUMAN alarma suprimida por flap recuperable channel=$CHANNEL level=$LEVEL" >> "$ALARM_LOG"
+    exit 0
+fi
 
 if [ -f "$EMAIL_ENV_PRIMARY" ]; then
     # shellcheck source=/var/www/html/logs/web_alarm_email.env
@@ -75,8 +96,107 @@ with open(tmp, "w", encoding="utf-8") as f:
 os.replace(tmp, status_file)
 PY
 
+email_event_is_extreme() {
+    if [ "$LEVEL" != "ALARM" ]; then
+        return 0
+    fi
+
+    if [ "${EMAIL_ALARM_MODE:-extreme}" = "all" ]; then
+        return 0
+    fi
+
+    case "$MESSAGE" in
+        *"sin actualizar tras reinicio"*|*"degradado tras reinicio"*|*"no levantó tras reinicio"*|*"caido/congelado"*|*"congelado"*|*"detenido"*)
+            return 0
+            ;;
+        *)
+            echo "[web_alarm] $NOW_HUMAN email filtrado no extremo channel=$CHANNEL level=$LEVEL" >> "$ALARM_LOG"
+            return 1
+            ;;
+    esac
+}
+
+email_event_is_throttled() {
+    if [ "$LEVEL" != "ALARM" ]; then
+        return 1
+    fi
+
+    local cooldown="${EMAIL_CHANNEL_COOLDOWN_SECONDS:-1800}"
+    if ! [[ "$cooldown" =~ ^[0-9]+$ ]] || [ "$cooldown" -le 0 ]; then
+        return 1
+    fi
+
+    python3 - "$EMAIL_THROTTLE_FILE" "$CHANNEL" "$NOW_EPOCH" "$cooldown" <<'PY'
+import json
+import os
+import sys
+
+throttle_file, channel, now_epoch, cooldown = sys.argv[1:]
+now_epoch = int(now_epoch)
+cooldown = int(cooldown)
+
+data = {}
+if os.path.exists(throttle_file):
+    try:
+        with open(throttle_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            data = loaded
+    except Exception:
+        data = {}
+
+last_sent = int(data.get(channel, 0) or 0)
+if last_sent and now_epoch - last_sent < cooldown:
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        echo "[web_alarm] $NOW_HUMAN email en cooldown channel=$CHANNEL level=$LEVEL cooldown=${cooldown}s" >> "$ALARM_LOG"
+        return 0
+    fi
+
+    return 1
+}
+
+mark_email_sent() {
+    python3 - "$EMAIL_THROTTLE_FILE" "$CHANNEL" "$NOW_EPOCH" <<'PY'
+import json
+import os
+import sys
+
+throttle_file, channel, now_epoch = sys.argv[1:]
+now_epoch = int(now_epoch)
+
+data = {}
+if os.path.exists(throttle_file):
+    try:
+        with open(throttle_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            data = loaded
+    except Exception:
+        data = {}
+
+data[channel] = now_epoch
+tmp = throttle_file + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=True, separators=(",", ":"))
+os.replace(tmp, throttle_file)
+PY
+}
+
 send_email_alert() {
     if [ "${ENABLE_EMAIL_ALERTS:-0}" != "1" ]; then
+        return 2
+    fi
+
+    if ! email_event_is_extreme; then
+        return 2
+    fi
+
+    if email_event_is_throttled; then
         return 2
     fi
 
@@ -128,6 +248,7 @@ with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
 PY
+    mark_email_sent || true
 }
 
 if send_email_alert; then

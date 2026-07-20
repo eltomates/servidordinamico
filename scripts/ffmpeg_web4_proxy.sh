@@ -32,12 +32,13 @@ USER_AGENT="${USER_AGENT:-Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KH
 HTTP_REFERER="${HTTP_REFERER:-https://www.canela.tv/}"
 HTTP_ORIGIN="${HTTP_ORIGIN:-https://www.canela.tv}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 HLS_TIME="${HLS_TIME:-4}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-45}"
 FORCE_RESTART_SECONDS="${FORCE_RESTART_SECONDS:-0}"
 WEB4_CANELA_DIRECT_AV="${WEB4_CANELA_DIRECT_AV:-1}"
-WEB4_CANELA_DIRECT_RESOLUTION="${WEB4_CANELA_DIRECT_RESOLUTION:-1280x720}"
+WEB4_CANELA_DIRECT_RESOLUTION="${WEB4_CANELA_DIRECT_RESOLUTION:-854x480}"
+WEB4_TARGET_BANDWIDTH="${WEB4_TARGET_BANDWIDTH:-1200000}"
 WEB4_BROWSER_RESTREAM="${WEB4_BROWSER_RESTREAM:-1}"
 WEB4_BROWSER_WIDTH="${WEB4_BROWSER_WIDTH:-1280}"
 WEB4_BROWSER_HEIGHT="${WEB4_BROWSER_HEIGHT:-720}"
@@ -195,7 +196,7 @@ select_best_hls_variant() {
 
   playlist_text="$(curl -fsSL --connect-timeout 15 --max-time 30 "$master_url" | tr -d '\r')" || return 1
 
-  best_variant="$(printf '%s\n' "$playlist_text" | awk '
+  best_variant="$(printf '%s\n' "$playlist_text" | awk -v target="$WEB4_TARGET_BANDWIDTH" '
     function get_bandwidth(attrs, count,   i, bw) {
       bw = 0
       for (i = 1; i <= count; i++) {
@@ -215,10 +216,12 @@ select_best_hls_variant() {
       bw = get_bandwidth(attrs, count)
 
       if (getline uri_line > 0 && uri_line !~ /^#/) {
-        print bw "\t" uri_line
+        score = bw - target
+        if (score < 0) score = -score
+        print score "\t" uri_line
       }
     }
-  ' | sort -nr -k1,1)"
+  ' | sort -n -k1,1)"
 
   if [ -z "$best_variant" ]; then
     return 1
@@ -534,15 +537,15 @@ while true; do
     -i "$INPUT_URL" \
     -map 0:v:0 \
     -map 0:a:0 \
-    -vf "scale=-2:720:flags=bicubic" \
+    -vf "scale=-2:540:flags=bicubic" \
     -c:v libx264 \
     -preset superfast \
     -tune zerolatency \
     -profile:v high \
     -level 4.0 \
-    -b:v 2500k \
-    -maxrate 3200k \
-    -bufsize 6400k \
+    -b:v 1200k \
+    -maxrate 1400k \
+    -bufsize 2800k \
     -fps_mode:v cfr \
     -max_muxing_queue_size 2048 \
     -g 60 \
@@ -550,7 +553,7 @@ while true; do
     -sc_threshold 0 \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
     -af "aresample=async=1:first_pts=0" \
     -f hls \
     -hls_time "$HLS_TIME" \

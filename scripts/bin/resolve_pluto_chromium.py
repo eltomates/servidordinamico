@@ -9,6 +9,7 @@ Salida: URL de playlist HLS en stdout, diagnóstico en stderr.
 import os
 import sys
 import re
+import urllib.parse
 import urllib.request
 
 page_url = sys.argv[1] if len(sys.argv) > 1 else "https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32"
@@ -16,6 +17,7 @@ timeout_sec = int(sys.argv[2]) if len(sys.argv) > 2 else 15
 headless_mode = os.environ.get("PW_HEADLESS", "1") != "0"
 skip_verify = os.environ.get("PLUTO_SKIP_VERIFY", "0") == "1"
 target_bandwidth = int(os.environ.get("PLUTO_TARGET_BANDWIDTH", "0") or "0")
+prefer_master = os.environ.get("PLUTO_PREFER_MASTER", "0") == "1"
 
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -28,6 +30,7 @@ def is_candidate(url: str) -> bool:
         url.startswith("https://")
         and ".m3u8" in url
         and "/v2/stitch/hls/channel/" in url
+        and "/audio/audio/" not in url
     )
 
 
@@ -41,6 +44,8 @@ def score_url(url: str) -> int:
         score += 20
     if "/master.m3u8" in url:
         score += 10
+        if prefer_master:
+            score += 500
     if "jwt=" in url:
         score += 20
     if target_bandwidth > 0:
@@ -62,9 +67,51 @@ def verify_playlist(url: str, timeout: int = 8) -> bool:
     if "#EXTM3U" not in text:
         return False
 
+    # El master conserva las rendiciones de audio separadas que Pluto usa en
+    # algunos canales. ffmpeg selecciona despues una variante A/V compatible.
+    if "#EXT-X-STREAM-INF:" in text and ".m3u8" in text:
+        return True
+
     # Pluto puede entregar variantes MPEG-TS o CMAF/fMP4 segun el canal.
     segment_markers = (".ts", ".m4s", ".cmfv", ".cmfa", ".mp4")
     return any(marker in text for marker in segment_markers)
+
+
+def select_master_variant(url: str) -> str:
+    if prefer_master or target_bandwidth <= 0 or "/master.m3u8" not in url:
+        return url
+
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        final_url = response.geturl()
+        text = response.read().decode("utf-8", "ignore")
+
+    best_url = ""
+    best_score = None
+    pending_bandwidth = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#EXT-X-STREAM-INF:"):
+            match = re.search(r"(?:AVERAGE-)?BANDWIDTH=(\d+)", line)
+            pending_bandwidth = int(match.group(1)) if match else None
+            continue
+        if line.startswith("#") or pending_bandwidth is None:
+            continue
+
+        score = abs(pending_bandwidth - target_bandwidth)
+        if best_score is None or score < best_score:
+            best_score = score
+            best_url = urllib.parse.urljoin(final_url, line)
+        pending_bandwidth = None
+
+    if best_url:
+        print("[chromium] Master normalizado a variante HLS", file=sys.stderr)
+        return best_url
+
+    return url
 
 
 def main() -> int:
@@ -166,22 +213,22 @@ def main() -> int:
 
     if skip_verify:
         # Modo rapido: devolver la mejor candidata capturada por Chromium.
-        print(top_candidates[0])
+        print(select_master_variant(top_candidates[0]))
         return 0
 
     for candidate in top_candidates:
         try:
             if verify_playlist(candidate):
-                print(candidate)
+                print(select_master_variant(candidate))
                 return 0
         except Exception as exc:
             print(f"[chromium] Validación falló para candidata: {exc}", file=sys.stderr)
 
     # Evita bucles largos: si se capturó una candidata con JWT, usarla como fallback.
     fallback = top_candidates[0]
-    if "jwt=" in fallback and "/playlist.m3u8" in fallback:
+    if "jwt=" in fallback and ".m3u8" in fallback:
         print("[chromium] Aviso: usando candidata sin verificar (fallback)", file=sys.stderr)
-        print(fallback)
+        print(select_master_variant(fallback))
         return 0
 
     sys.exit("ERROR: Pluto sólo devolvió playlists no reproducibles en Chromium")

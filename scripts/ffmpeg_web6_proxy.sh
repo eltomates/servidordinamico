@@ -40,11 +40,11 @@ PLUTO_SKIP_VERIFY="${PLUTO_SKIP_VERIFY:-1}"
 PLUTO_AUDIO_OFFSET_SECONDS="${PLUTO_AUDIO_OFFSET_SECONDS:-0}"
 RESOLVE_TIMEOUT_SECONDS="${RESOLVE_TIMEOUT_SECONDS:-45}"
 LAST_RESOLVED_FILE="${LAST_RESOLVED_FILE:-/var/www/html/logs/web6_last_resolved.url}"
-USE_LAST_RESOLVED_ON_START="${USE_LAST_RESOLVED_ON_START:-1}"
+USE_LAST_RESOLVED_ON_START="${USE_LAST_RESOLVED_ON_START:-0}"
 FORCE_RESTART_SECONDS="${FORCE_RESTART_SECONDS:-0}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
-HLS_TIME="${HLS_TIME:-5}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
+HLS_TIME="${HLS_TIME:-4}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 HLS_DELETE_THRESHOLD="${HLS_DELETE_THRESHOLD:-2}"
 FFMPEG_REFERER="${FFMPEG_REFERER:-https://pluto.tv/}"
 OUTPUT_FPS="${OUTPUT_FPS:-20}"
@@ -53,7 +53,7 @@ VIDEO_BITRATE="${VIDEO_BITRATE:-850k}"
 VIDEO_MAXRATE="${VIDEO_MAXRATE:-1100k}"
 VIDEO_BUFSIZE="${VIDEO_BUFSIZE:-2400k}"
 VIDEO_GOP="${VIDEO_GOP:-100}"
-AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
+AUDIO_BITRATE="${AUDIO_BITRATE:-96k}"
 MAX_SEGMENT_REPEAT_SECONDS="${MAX_SEGMENT_REPEAT_SECONDS:-45}"
 MIN_GOOD_RUN_SECONDS="${MIN_GOOD_RUN_SECONDS:-8}"
 REFRESH_SHORT_FAIL_STREAK="${REFRESH_SHORT_FAIL_STREAK:-2}"
@@ -78,6 +78,27 @@ is_direct_stream_url() {
     *.m3u8*|*.mpd*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+is_ephemeral_pluto_variant_url() {
+  case "$1" in
+    *cfd-v4-service-channel-stitcher*.prd.pluto.tv/v2/stitch/hls/channel/*/playlist.m3u8*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cached_resolved_url_allowed() {
+  local cached_url="$1"
+
+  case "$SRC_URL" in
+    https://pluto.tv/*/live-tv/*)
+      if is_ephemeral_pluto_variant_url "$cached_url"; then
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
 }
 
 derive_pluto_audio_url() {
@@ -311,7 +332,7 @@ run_ffmpeg_from_direct_url() {
     -force_key_frames "expr:gte(t,n_forced*$HLS_TIME)" \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
     -af "aresample=async=1:first_pts=0" \
     -f hls \
     -hls_time "$HLS_TIME" \
@@ -369,7 +390,7 @@ run_ffmpeg_from_direct_url() {
     -c:a aac \
     -af "aresample=async=1:first_pts=0" \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
     -f hls \
     -hls_time "$HLS_TIME" \
     -hls_list_size "$HLS_LIST_SIZE" \
@@ -410,7 +431,7 @@ run_ffmpeg_from_ytdlp() {
       -keyint_min 40 \
       -c:a aac \
       -ac 2 \
-      -b:a 128k \
+      -b:a 96k \
       -f hls \
       -hls_time 4 \
       -hls_list_size "$HLS_LIST_SIZE" \
@@ -535,9 +556,18 @@ while true; do
     resolve_rc=0
   elif [ "$FORCE_FRESH_RESOLVE" -eq 0 ] && [ "$USE_LAST_RESOLVED_ON_START" = "1" ] && [ "$LAST_RESOLVED_BOOT_USED" -eq 0 ] && [ -s "$LAST_RESOLVED_FILE" ]; then
     RESOLVED_SRC_URL="$(cat "$LAST_RESOLVED_FILE")"
-    echo "[ffmpeg_web6_proxy] Usando ultima URL HLS buena para arrancar rapido." >&2
-    LAST_RESOLVED_BOOT_USED=1
-    resolve_rc=0
+    if cached_resolved_url_allowed "$RESOLVED_SRC_URL"; then
+      echo "[ffmpeg_web6_proxy] Usando ultima URL HLS buena para arrancar rapido." >&2
+      LAST_RESOLVED_BOOT_USED=1
+      resolve_rc=0
+    else
+      echo "[ffmpeg_web6_proxy] Ignorando URL HLS cacheada temporal de Pluto; resolviendo fresco." >&2
+      rm -f "$LAST_RESOLVED_FILE" 2>/dev/null || true
+      RESOLVED_SRC_URL="$(resolve_source_url_with_timeout "$SRC_URL")"
+      resolve_rc=$?
+      FORCE_FRESH_RESOLVE=0
+      LAST_RESOLVED_BOOT_USED=1
+    fi
   else
     if [ "$FORCE_FRESH_RESOLVE" -eq 1 ]; then
       echo "[ffmpeg_web6_proxy] Forzando resolucion fresca de Pluto tras detectar stream atascado." >&2
@@ -558,8 +588,13 @@ while true; do
 
   if { [ "$resolve_rc" -ne 0 ] || [ -z "$RESOLVED_SRC_URL" ]; } && [ "$allow_cached_fallback" = "1" ] && [ -s "$LAST_RESOLVED_FILE" ]; then
     RESOLVED_SRC_URL="$(cat "$LAST_RESOLVED_FILE")"
-    echo "[ffmpeg_web6_proxy] Usando ultima URL HLS buena tras fallo de resolucion." >&2
-    resolve_rc=0
+    if cached_resolved_url_allowed "$RESOLVED_SRC_URL"; then
+      echo "[ffmpeg_web6_proxy] Usando ultima URL HLS buena tras fallo de resolucion." >&2
+      resolve_rc=0
+    else
+      echo "[ffmpeg_web6_proxy] No uso fallback cacheado temporal de Pluto tras fallo de resolucion." >&2
+      rm -f "$LAST_RESOLVED_FILE" 2>/dev/null || true
+    fi
   fi
 
   if [ "$resolve_rc" -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then

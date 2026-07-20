@@ -28,11 +28,12 @@ start_hdmi_channel() {
   nohup bash "$script" > "$log_file" 2>&1 &
 }
 
-echo "[start_all_services] Arrancando capturas HDMI (hdmi1-hdmi4)..."
+echo "[start_all_services] Arrancando capturas HDMI (hdmi1-hdmi5)..."
 start_hdmi_channel "hdmi1"
 start_hdmi_channel "hdmi2"
 start_hdmi_channel "hdmi3"
 start_hdmi_channel "hdmi4"
+start_hdmi_channel "hdmi5"
 
 # Reiniciar proxys HLS existentes
 if [ -x "$SCRIPT_DIR/start_all_proxies.sh" ]; then

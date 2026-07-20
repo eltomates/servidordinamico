@@ -30,8 +30,8 @@ OUT="${OUT:-/var/www/html/hls/web15}"
 SRC_URL="${SRC_URL:-${CONFIG_SRC_URL:-https://www.tvazteca.com/aztecauno/al-extremo/envivo}}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
 DEFAULT_USER_AGENT="${FFMPEG_USER_AGENT:-VLC/3.0.20 LibVLC/3.0.20}"
-HLS_TIME="${HLS_TIME:-6}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-15}"
+HLS_TIME="${HLS_TIME:-4}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 HLS_DELETE_THRESHOLD="${HLS_DELETE_THRESHOLD:-8}"
 MDSTRM_TARGET_BANDWIDTH="${MDSTRM_TARGET_BANDWIDTH:-915200}"
 FPS="${FPS:-}"
@@ -41,10 +41,11 @@ VIDEO_FPS_MODE="${VIDEO_FPS_MODE:-passthrough}"
 VIDEO_BITRATE="${VIDEO_BITRATE:-800k}"
 VBV_MAX="${VBV_MAX:-900k}"
 VBV_BUF="${VBV_BUF:-2400k}"
-AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
+AUDIO_BITRATE="${AUDIO_BITRATE:-96k}"
 VIDEO_CODEC="${VIDEO_CODEC:-copy}"
 AUDIO_CODEC="${AUDIO_CODEC:-aac}"
 AUDIO_DELAY_MS="${AUDIO_DELAY_MS:-100}"
+X264_PRESET="${X264_PRESET:-superfast}"
 INPUT_LIVE_START_INDEX="${INPUT_LIVE_START_INDEX:--8}"
 REALTIME_PACE="${REALTIME_PACE:-1}"
 USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-0}"
@@ -228,7 +229,7 @@ print(best_url)
 PY
 }
 
-mkdir -p "$OUT"
+mkdir -p "$OUT" "$OUT/480p" "$OUT/360p" "$OUT/180p"
 chmod 777 "$OUT" 2>/dev/null || true
 
 while true; do
@@ -276,57 +277,39 @@ while true; do
 
   ffmpeg_cmd+=(
     -i "$RESOLVED_SRC_URL"
-    -map 0:v:0
-    -map 0:a:0?
+    -filter_complex "[0:v]split=3[v480src][v360src][v180src];[v480src]scale=-2:480:flags=fast_bilinear,fps=25[v480];[v360src]scale=640:360:flags=fast_bilinear,fps=25[v360];[v180src]scale=320:180:flags=fast_bilinear,fps=20[v180];[0:a:0]aresample=async=1:first_pts=0,asplit=3[a480][a360][a180]"
+    -map "[v480]" -map "[a480]"
+    -map "[v360]" -map "[a360]"
+    -map "[v180]" -map "[a180]"
     -dn
     -sn
     -max_muxing_queue_size 2048
+    -c:v libx264
+    -preset "$X264_PRESET"
+    -tune zerolatency
+    -pix_fmt yuv420p
+    -b:v:0 950k -maxrate:v:0 1100k -bufsize:v:0 2200k
+    -b:v:1 700k -maxrate:v:1 850k -bufsize:v:1 1700k
+    -b:v:2 350k -maxrate:v:2 450k -bufsize:v:2 900k
+    -g "$GOP"
+    -keyint_min "$GOP"
+    -sc_threshold 0
+    -force_key_frames "expr:gte(t,n_forced*$KEYFRAME_INTERVAL)"
+    -c:a aac
+    -ac 2
+    -b:a:0 96k -b:a:1 96k -b:a:2 64k
     -f hls
     -hls_time "$HLS_TIME"
     -hls_list_size "$HLS_LIST_SIZE"
     -start_number "$START_NUMBER"
     -hls_allow_cache 0
     -hls_delete_threshold "$HLS_DELETE_THRESHOLD"
-    -hls_segment_filename "$OUT/seg_${RUN_ID}_%06d.ts"
+    -hls_flags "delete_segments+program_date_time+independent_segments+temp_file+omit_endlist"
+    -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:360p v:2,a:2,name:180p"
+    -master_pl_name index.m3u8
+    -hls_segment_filename "$OUT/%v/seg_${RUN_ID}_%06d.ts"
+    "$OUT/%v/index.m3u8"
   )
-
-  if [ "$VIDEO_CODEC" = "copy" ]; then
-    ffmpeg_cmd+=( -c:v copy )
-  else
-    ffmpeg_cmd+=(
-      -c:v libx264
-      -preset veryfast
-      -tune zerolatency
-      -profile:v baseline
-      -level 3.1
-      -fps_mode:v "$VIDEO_FPS_MODE"
-      -b:v "$VIDEO_BITRATE"
-      -maxrate "$VBV_MAX"
-      -bufsize "$VBV_BUF"
-      -g "$GOP"
-      -keyint_min "$GOP"
-      -force_key_frames "expr:gte(t,n_forced*$KEYFRAME_INTERVAL)"
-    )
-    HLS_FLAGS+="+independent_segments"
-  fi
-
-  if [ "$AUDIO_CODEC" = "copy" ]; then
-    ffmpeg_cmd+=( -c:a copy )
-  else
-    audio_filter="aresample=async=1:first_pts=0"
-    if [ "${AUDIO_DELAY_MS:-0}" -gt 0 ] 2>/dev/null; then
-      audio_filter="adelay=${AUDIO_DELAY_MS}|${AUDIO_DELAY_MS},${audio_filter}"
-    fi
-
-    ffmpeg_cmd+=(
-      -c:a aac
-      -ac 2
-      -b:a "$AUDIO_BITRATE"
-      -af "$audio_filter"
-    )
-  fi
-
-  ffmpeg_cmd+=( -hls_flags "$HLS_FLAGS" "$OUT/index.m3u8" )
 
   if [ -n "$FPS" ]; then
     ffmpeg_cmd+=( -r "$FPS" )
@@ -337,8 +320,8 @@ while true; do
   ffmpeg_pid=$!
 
   last_ok_ts="$(date +%s)"
-  if [ -f "$OUT/index.m3u8" ]; then
-    last_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+  if [ -f "$OUT/480p/index.m3u8" ]; then
+    last_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
   else
     last_mtime="$last_ok_ts"
   fi
@@ -346,8 +329,8 @@ while true; do
   while kill -0 "$ffmpeg_pid" 2>/dev/null; do
     sleep "$WATCHDOG_INTERVAL_SECONDS"
 
-    if [ -f "$OUT/index.m3u8" ]; then
-      current_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+    if [ -f "$OUT/480p/index.m3u8" ]; then
+      current_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
       if [ "$current_mtime" != "$last_mtime" ]; then
         last_mtime="$current_mtime"
         last_ok_ts="$(date +%s)"
@@ -358,7 +341,7 @@ while true; do
     stale_seconds=$(( now_ts - last_ok_ts ))
 
     if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
-      echo "[ffmpeg_web15_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
+      echo "[ffmpeg_web15_proxy] 480p/index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
       kill "$ffmpeg_pid" 2>/dev/null || true
       sleep "$WATCHDOG_KILL_GRACE_SECONDS"
       if kill -0 "$ffmpeg_pid" 2>/dev/null; then

@@ -1,39 +1,39 @@
 #EXTM3U
 #EXTINF:-1 tvg-id="hdmi1" tvg-name="HDMI1" group-title="HDMI",HDMI1
-http://192.168.1.68:8081/hls/hdmi1/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/hdmi1/480p/index.m3u8
 #EXTINF:-1 tvg-id="hdmi2" tvg-name="HDMI2" group-title="HDMI",HDMI2
-http://192.168.1.68:8081/hls/hdmi2/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/hdmi2/480p/index.m3u8
 #EXTINF:-1 tvg-id="hdmi3" tvg-name="HDMI3" group-title="HDMI",HDMI3
-http://192.168.1.68:8081/hls/hdmi3/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/hdmi3/480p/index.m3u8
 #EXTINF:-1 tvg-id="hdmi4" tvg-name="HDMI4" group-title="HDMI",HDMI4
-http://192.168.1.68:8081/hls/hdmi4/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/hdmi4/480p/index.m3u8
 #EXTINF:-1 tvg-id="hdmi5" tvg-name="HDMI5" group-title="HDMI",HDMI5
-http://192.168.1.68:8081/hls/hdmi5/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/hdmi5/480p/index.m3u8
 #EXTINF:-1 tvg-id="web2" tvg-name="Canal web 2 (HBO)" group-title="Web",Canal web 2 (HBO)
-http://192.168.1.68:8081/hls/web2/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web2/index.m3u8
 #EXTINF:-1 tvg-id="web3" tvg-name="Canal web 3 (Cartoon Network)" group-title="Web",Canal web 3 (Cartoon Network)
-http://192.168.1.68:8081/hls/web3/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web3/index.m3u8
 #EXTINF:-1 tvg-id="web4" tvg-name="Canal web 4 (Canela Clasicos)" group-title="Web",Canal web 4 (Canela Clasicos)
-http://192.168.1.68:8081/hls/web4/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web4/index.m3u8
 #EXTINF:-1 tvg-id="web5" tvg-name="Azteca 7" group-title="Web",Azteca 7
-http://192.168.1.68:8081/hls/web5/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web5/480p/index.m3u8
 #EXTINF:-1 tvg-id="web6" tvg-name="Canal web 6 (Cine Clasico)" group-title="Web",Canal web 6 (Cine Clasico)
-http://192.168.1.68:8081/hls/web6/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web6/index.m3u8
 #EXTINF:-1 tvg-id="web7" tvg-name="Canal web 7 (Cine Estelar)" group-title="Web",Canal web 7 (Cine Estelar)
-http://192.168.1.68:8081/hls/web7/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web7/480p/index.m3u8
 #EXTINF:-1 tvg-id="web8" tvg-name="TUDN" group-title="Web",TUDN
-http://192.168.1.68:8081/hls/web8/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web8/index.m3u8
 #EXTINF:-1 tvg-id="web9" tvg-name="Canela TV Narco Drama" group-title="Web",Canela TV Narco Drama
-http://192.168.1.68:8081/hls/web9/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web9/index.m3u8
 #EXTINF:-1 tvg-id="web10" tvg-name="Canal web 10 (Cine Adrenalina)" group-title="Web",Canal web 10 (Cine Adrenalina)
-http://192.168.1.68:8081/hls/web10/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web10/index.m3u8
 #EXTINF:-1 tvg-id="web12" tvg-name="Canal web 12 (Nickelodeon)" group-title="Web",Canal web 12 (Nickelodeon)
-http://192.168.1.68:8081/hls/web12/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web12/index.m3u8
 #EXTINF:-1 tvg-id="web13" tvg-name="TeleFormula" group-title="Web",TeleFormula
-http://192.168.1.68:8081/hls/web13/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web13/index.m3u8
 #EXTINF:-1 tvg-id="web14" tvg-name="Pluto TV" group-title="Web",Pluto TV
-http://192.168.1.68:8081/hls/web14/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web14/index.m3u8
 #EXTINF:-1 tvg-id="web15" tvg-name="Azteca Uno" group-title="Web",Azteca Uno
-http://192.168.1.68:8081/hls/web15/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web15/480p/index.m3u8
 #EXTINF:-1 tvg-id="web16" tvg-name="Todo Cine" group-title="Web",Todo Cine
-http://192.168.1.68:8081/hls/web16/480p/index.m3u8
+http://servidordinamico.giize.com:8081/hls/web16/480p/index.m3u8

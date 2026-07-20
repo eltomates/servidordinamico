@@ -45,7 +45,7 @@ emit_alarm() {
 }
 
 latest_segment() {
-  find "$HLS_DIR" -maxdepth 2 -type f -name "seg_*.ts" -printf "%T@ %p\n" 2>/dev/null | sort -nr | cut -d" " -f2- | head -n1 || true
+  ls -1t "$HLS_DIR"/seg_*.ts 2>/dev/null | head -n1 || true
 }
 
 restart_hdmi4() {

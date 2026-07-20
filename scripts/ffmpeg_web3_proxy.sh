@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Proxy HLS desde una URL remota a un HLS local servido por Apache.
-# Entrada:  http://38.49.128.38:8000/play/a0c0/index.m3u8
+# Entrada:  https://epg.provider.plex.tv/library/parts/608049aefa2b8ae93c2c3a63-65b1568052aa31b8f64da064.m3u8?includeAllStreams=1&X-Plex-Product=Plex+Mediaverse&X-Plex-Token=CYz4iNppeRTsRp7eS2s8
 # Salida:   /var/www/html/hls/web3/index.m3u8 (accesible como /hls/web3/index.m3u8)
 
 set -e
@@ -13,17 +13,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 acquire_single_instance_lock "${BASH_SOURCE[0]}" || exit 0
 
 OUT="${OUT:-/var/www/html/hls/web3}"
-SRC_URL="${SRC_URL:-http://38.49.128.38:8000/play/a0c0/index.m3u8}"
+SRC_URL="${SRC_URL:-https://epg.provider.plex.tv/library/parts/608049aefa2b8ae93c2c3a63-65b1568052aa31b8f64da064.m3u8?includeAllStreams=1&X-Plex-Product=Plex+Mediaverse&X-Plex-Token=CYz4iNppeRTsRp7eS2s8}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
 HLS_TIME="${HLS_TIME:-4}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-20}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 # Ajustes más similares a un canal estable (p.ej. web1)
 FPS="${FPS:-25}"
 GOP="${GOP:-50}"
 VBV_MAX="${VBV_MAX:-1200k}"
-VBV_BUF="${VBV_BUF:-3000k}"
+VBV_BUF="${VBV_BUF:-2800k}"
 VIDEO_BITRATE="${VIDEO_BITRATE:-1000k}"
-AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
+AUDIO_BITRATE="${AUDIO_BITRATE:-96k}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-180}"
 
 mkdir -p "$OUT"
@@ -44,7 +44,11 @@ while true; do
     -fflags +discardcorrupt+genpts \
     -err_detect ignore_err \
     -user_agent "VLC/3.0.20 LibVLC/3.0.20" \
+    -allowed_segment_extensions ALL \
+    -extension_picky 0 \
     -i "$SRC_URL" \
+    -map 0:v:2 \
+    -map 0:a:2? \
     -c:v libx264 \
     -preset veryfast \
     -tune zerolatency \

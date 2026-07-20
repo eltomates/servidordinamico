@@ -48,7 +48,7 @@ X264_PRESET="${X264_PRESET:-superfast}"
 INPUT_LIVE_START_INDEX="${INPUT_LIVE_START_INDEX:--36}"
 REALTIME_PACE="${REALTIME_PACE:-0}"
 USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-0}"
-MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-90}"
+MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-30}"
 WATCHDOG_INTERVAL_SECONDS="${WATCHDOG_INTERVAL_SECONDS:-3}"
 WATCHDOG_KILL_GRACE_SECONDS="${WATCHDOG_KILL_GRACE_SECONDS:-1}"
 WATCHDOG_STARTUP_GRACE_SECONDS="${WATCHDOG_STARTUP_GRACE_SECONDS:-20}"
@@ -258,7 +258,7 @@ if not best_url:
 print(best_url)
 PY
 }
-mkdir -p "$OUT"
+mkdir -p "$OUT" "$OUT/480p" "$OUT/360p" "$OUT/180p"
 chmod 777 "$OUT" 2>/dev/null || true
 
 while true; do
@@ -286,7 +286,7 @@ while true; do
 
   ffmpeg_cmd=(
     ffmpeg
-    -loglevel info
+    -loglevel warning
     -fflags +discardcorrupt+genpts
     -err_detect ignore_err
     -rw_timeout "$HTTP_RW_TIMEOUT_US"
@@ -310,56 +310,40 @@ while true; do
 
   ffmpeg_cmd+=(
     -i "$RESOLVED_SRC_URL"
-    -map 0:v:0
-    -map 0:a:0?
+    -filter_complex "[0:v]split=3[v480src][v360src][v180src];[v480src]scale=-2:480:flags=fast_bilinear,fps=25[v480];[v360src]scale=640:360:flags=fast_bilinear,fps=25[v360];[v180src]scale=320:180:flags=fast_bilinear,fps=25[v180];[0:a:0]aresample=async=1000:min_hard_comp=0.100:first_pts=0,asplit=3[a480][a360][a180]"
+    -map "[v480]" -map "[a480]"
+    -map "[v360]" -map "[a360]"
+    -map "[v180]" -map "[a180]"
     -dn
     -sn
     -max_muxing_queue_size 2048
+    -c:v libx264
+    -preset "$X264_PRESET"
+    -tune zerolatency
+    -pix_fmt yuv420p
+    -b:v:0 950k -maxrate:v:0 1100k -bufsize:v:0 2200k
+    -b:v:1 700k -maxrate:v:1 850k -bufsize:v:1 1700k
+    -b:v:2 350k -maxrate:v:2 450k -bufsize:v:2 900k
+    -g "$GOP"
+    -keyint_min "$GOP"
+    -sc_threshold 0
+    -force_key_frames "expr:gte(t,n_forced*$KEYFRAME_INTERVAL)"
+    -c:a aac
+    -b:a:0 96k -b:a:1 96k -b:a:2 64k
+    -ac 2
+    -ar 48000
     -f hls
     -hls_time "$HLS_TIME"
     -hls_list_size "$HLS_LIST_SIZE"
     -start_number "$START_NUMBER"
     -hls_allow_cache 0
     -hls_delete_threshold "$HLS_DELETE_THRESHOLD"
-    -hls_segment_filename "$OUT/seg_${RUN_ID}_%06d.ts"
+    -hls_flags "delete_segments+program_date_time+independent_segments+temp_file+omit_endlist"
+    -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:360p v:2,a:2,name:180p"
+    -master_pl_name index.m3u8
+    -hls_segment_filename "$OUT/%v/seg_${RUN_ID}_%06d.ts"
+    "$OUT/%v/index.m3u8"
   )
-
-  if [ "$VIDEO_CODEC" = "copy" ]; then
-    ffmpeg_cmd+=( -c:v copy )
-  else
-    ffmpeg_cmd+=(
-      -c:v libx264
-      -preset "$X264_PRESET"
-      -tune zerolatency
-      -profile:v baseline
-      -level 3.1
-      -fps_mode:v "$VIDEO_FPS_MODE"
-      -b:v "$VIDEO_BITRATE"
-      -maxrate "$VBV_MAX"
-      -bufsize "$VBV_BUF"
-      -g "$GOP"
-      -keyint_min "$GOP"
-      -force_key_frames "expr:gte(t,n_forced*$KEYFRAME_INTERVAL)"
-    )
-    HLS_FLAGS+="+independent_segments"
-  fi
-
-  if [ "$AUDIO_CODEC" = "copy" ]; then
-    ffmpeg_cmd+=( -c:a copy )
-  else
-    ffmpeg_cmd+=(
-      -c:a aac
-      -ac 2
-      -b:a "$AUDIO_BITRATE"
-      -af aresample=async=1:first_pts=0
-    )
-  fi
-
-  ffmpeg_cmd+=( -hls_flags "$HLS_FLAGS" "$OUT/index.m3u8" )
-
-  if [ -n "$FPS" ]; then
-    ffmpeg_cmd+=( -r "$FPS" )
-  fi
 
   "${ffmpeg_cmd[@]}" &
 
@@ -370,10 +354,10 @@ while true; do
     last_media_sequence=""
     last_segment_name=""
 
-    if [ -f "$OUT/index.m3u8" ]; then
-      last_mtime="$(stat -c %Y "$OUT/index.m3u8")"
-      last_media_sequence="$(sed -n 's/^#EXT-X-MEDIA-SEQUENCE://p' "$OUT/index.m3u8" | head -n1)"
-      last_segment_name="$(grep -E '^seg_.*\.ts$' "$OUT/index.m3u8" 2>/dev/null | tail -n1)"
+    if [ -f "$OUT/480p/index.m3u8" ]; then
+      last_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
+      last_media_sequence="$(sed -n 's/^#EXT-X-MEDIA-SEQUENCE://p' "$OUT/480p/index.m3u8" | head -n1)"
+      last_segment_name="$(grep -E '^seg_.*\.ts$' "$OUT/480p/index.m3u8" 2>/dev/null | tail -n1)"
     else
       last_mtime="$last_ok_ts"
     fi
@@ -383,10 +367,10 @@ while true; do
     # Mantener los segmentos previos permite que el reproductor conserve buffer tras reinicios.
     # Limpia segmentos heredados para evitar acumulación antes de reiniciar ffmpeg
 
-      if [ -f "$OUT/index.m3u8" ]; then
-        current_mtime="$(stat -c %Y "$OUT/index.m3u8")"
-        current_media_sequence="$(sed -n 's/^#EXT-X-MEDIA-SEQUENCE://p' "$OUT/index.m3u8" | head -n1)"
-        current_segment_name="$(grep -E '^seg_.*\.ts$' "$OUT/index.m3u8" 2>/dev/null | tail -n1)"
+      if [ -f "$OUT/480p/index.m3u8" ]; then
+        current_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
+        current_media_sequence="$(sed -n 's/^#EXT-X-MEDIA-SEQUENCE://p' "$OUT/480p/index.m3u8" | head -n1)"
+        current_segment_name="$(grep -E '^seg_.*\.ts$' "$OUT/480p/index.m3u8" 2>/dev/null | tail -n1)"
 
       if [ "$current_mtime" != "$last_mtime" ]; then
         last_mtime="$current_mtime"
@@ -408,7 +392,7 @@ while true; do
     stale_seconds=$(( now_ts - last_ok_ts ))
 
     if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
-      echo "[ffmpeg_web5_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
+      echo "[ffmpeg_web5_proxy] 480p/index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
       kill "$ffmpeg_pid" 2>/dev/null || true
       sleep "$WATCHDOG_KILL_GRACE_SECONDS"
       if kill -0 "$ffmpeg_pid" 2>/dev/null; then

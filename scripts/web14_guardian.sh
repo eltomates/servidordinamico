@@ -16,6 +16,7 @@ CHECK_INTERVAL="${WEB14_GUARD_INTERVAL:-8}"
 STALE_SECONDS="${WEB14_GUARD_STALE_SECONDS:-120}"
 RESTART_COOLDOWN="${WEB14_GUARD_RESTART_COOLDOWN:-120}"
 BOOTSTRAP_GRACE_SECONDS="${WEB14_GUARD_BOOTSTRAP_GRACE_SECONDS:-180}"
+ALARM_CONFIRM_SECONDS="${WEB14_GUARD_ALARM_CONFIRM_SECONDS:-60}"
 
 mkdir -p "$LOG_DIR" "$LOCK_DIR"
 chmod 777 "$LOCK_DIR" 2>/dev/null || true
@@ -46,12 +47,26 @@ latest_segment() {
   ls -1t "$HLS_DIR"/seg_*.ts 2>/dev/null | head -n1 || true
 }
 
+segment_age() {
+  local seg_path="$1"
+  local now_ts="$2"
+  local seg_mtime
+
+  if [ -z "$seg_path" ]; then
+    echo 9999
+    return
+  fi
+
+  seg_mtime="$(stat -c %Y "$seg_path" 2>/dev/null || echo 0)"
+  echo $(( now_ts - seg_mtime ))
+}
+
 last_restart_ts=0
 last_seen_seg=""
 in_alarm=0
 start_ts="$(date +%s)"
 
-log "Iniciado (CHECK_INTERVAL=${CHECK_INTERVAL}s, STALE_SECONDS=${STALE_SECONDS}s, RESTART_COOLDOWN=${RESTART_COOLDOWN}s)."
+log "Iniciado (CHECK_INTERVAL=${CHECK_INTERVAL}s, STALE_SECONDS=${STALE_SECONDS}s, RESTART_COOLDOWN=${RESTART_COOLDOWN}s, BOOTSTRAP_GRACE_SECONDS=${BOOTSTRAP_GRACE_SECONDS}s, ALARM_CONFIRM_SECONDS=${ALARM_CONFIRM_SECONDS}s)."
 emit_alarm "OK" "web14 monitor activo"
 
 while true; do
@@ -63,11 +78,8 @@ while true; do
     continue
   fi
 
-  if [ -z "$seg_path" ]; then
-    seg_age=9999
-  else
-    seg_mtime="$(stat -c %Y "$seg_path" 2>/dev/null || echo 0)"
-    seg_age=$(( now_ts - seg_mtime ))
+  seg_age="$(segment_age "$seg_path" "$now_ts")"
+  if [ -n "$seg_path" ]; then
     last_seen_seg="$(basename "$seg_path")"
   fi
 
@@ -78,14 +90,27 @@ while true; do
     fi
 
     since_restart=$(( now_ts - last_restart_ts ))
-    if [ "$in_alarm" -eq 0 ]; then
-      emit_alarm "ALARM" "web14 congelado (edad_ultimo_segmento=${seg_age}s, ultimo=${last_seen_seg:-none})"
-      in_alarm=1
-    fi
     if [ "$since_restart" -ge "$RESTART_COOLDOWN" ]; then
       log "Congelado detectado (edad_ultimo_segmento=${seg_age}s, ultimo=${last_seen_seg:-none}). Reiniciando web14..."
       bash "$SCRIPT_DIR/start_all_proxies.sh" --channel web14 >> "$LOG_DIR/web14_guardian.log" 2>&1 || true
       last_restart_ts="$now_ts"
+    fi
+    if [ "$in_alarm" -eq 0 ]; then
+      sleep "$ALARM_CONFIRM_SECONDS"
+      now_ts="$(date +%s)"
+      seg_path="$(latest_segment)"
+      seg_age="$(segment_age "$seg_path" "$now_ts")"
+      if [ -n "$seg_path" ]; then
+        last_seen_seg="$(basename "$seg_path")"
+      fi
+      if [ "$seg_age" -lt "$STALE_SECONDS" ]; then
+        log "Alarma suprimida: web14 se recupero durante confirmacion (edad_ultimo_segmento=${seg_age}s, ultimo=${last_seen_seg:-none})."
+        in_alarm=0
+        sleep "$CHECK_INTERVAL"
+        continue
+      fi
+      emit_alarm "ALARM" "web14 congelado confirmado (edad_ultimo_segmento=${seg_age}s, ultimo=${last_seen_seg:-none})"
+      in_alarm=1
     fi
   else
     if [ "$in_alarm" -eq 1 ]; then

@@ -6,16 +6,18 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "[stop_all_services] Parando capturas HDMI (hdmi1-hdmi4)..."
+echo "[stop_all_services] Parando capturas HDMI (hdmi1-hdmi5)..."
 pkill -f ffmpeg_hdmi1.sh 2>/dev/null || true
 pkill -f ffmpeg_hdmi2.sh 2>/dev/null || true
 pkill -f ffmpeg_hdmi3.sh 2>/dev/null || true
 pkill -f ffmpeg_hdmi4.sh 2>/dev/null || true
+pkill -f ffmpeg_hdmi5.sh 2>/dev/null || true
 
 pkill -f 'ffmpeg .*hls/hdmi1' 2>/dev/null || true
 pkill -f 'ffmpeg .*hls/hdmi2' 2>/dev/null || true
 pkill -f 'ffmpeg .*hls/hdmi3' 2>/dev/null || true
 pkill -f 'ffmpeg .*hls/hdmi4' 2>/dev/null || true
+pkill -f 'ffmpeg .*hls/hdmi5' 2>/dev/null || true
 
 # Parar proxys HLS (ffmpeg_web*_proxy.sh y ffmpeg asociados)
 echo "[stop_all_services] Parando proxys HLS web1-web16..."

@@ -2,7 +2,7 @@
 
 # Proxy HLS de prueba para web16.
 # Este canal esta preparado para pruebas con ViX y lectura de credenciales locales.
-# Salida: /var/www/html/hls/web16/index.m3u8
+# Salida: /var/www/html/hls/web16/index.m3u8 (master HLS)
 
 set -e
 umask 000
@@ -40,7 +40,8 @@ OUT="${OUT:-/var/www/html/hls/web16}"
 # Si existe una URL resuelta (m3u8 final), se prioriza para pruebas.
 SRC_URL="${SRC_URL:-${CONFIG_RESOLVED_URL:-${CONFIG_SRC_URL:-https://vix.com/es-es/canales/premium/channel-callsign-NU9VE}}}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
+WEB16_TARGET_BANDWIDTH="${WEB16_TARGET_BANDWIDTH:-1200000}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-120}"
 DEFAULT_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0}"
 USE_CHROMIUM_RESOLVER="${USE_CHROMIUM_RESOLVER:-1}"
@@ -114,7 +115,7 @@ select_best_hls_variant() {
 
   playlist_text="$(curl -fsSL --connect-timeout 15 --max-time 30 "$master_url" | tr -d '\r')" || return 1
 
-  best_variant="$(printf '%s\n' "$playlist_text" | awk '
+  best_variant="$(printf '%s\n' "$playlist_text" | awk -v target="$WEB16_TARGET_BANDWIDTH" '
     /^#EXT-X-STREAM-INF:/ {
       bw = 0
       count = split($0, attrs, ",")
@@ -130,8 +131,10 @@ select_best_hls_variant() {
       }
 
       if (getline uri_line > 0 && uri_line !~ /^#/) {
-        if (bw >= best_bw) {
-          best_bw = bw
+        score = bw - target
+        if (score < 0) score = -score
+        if (best_uri == "" || score < best_score) {
+          best_score = score
           best_uri = uri_line
         }
       }
@@ -175,7 +178,7 @@ resolve_source_url() {
   printf '%s\n' "$candidate_url"
 }
 
-mkdir -p "$OUT"
+mkdir -p "$OUT" "$OUT/480p" "$OUT/360p" "$OUT/180p"
 
 if [ -n "${WEB16_USER:-}" ] || [ -n "${WEB16_USERNAME:-}" ]; then
   echo "[ffmpeg_web16_proxy] Credenciales de web16 cargadas desde archivo local." >&2
@@ -194,7 +197,8 @@ while true; do
 
   trim_hls_segments "$OUT" "$KEEP_SEGMENTS"
 
-  START_NUMBER="$(date +%s)"
+  RUN_ID="$(date +%s)"
+  START_NUMBER="$RUN_ID"
 
   ffmpeg \
     -loglevel info \
@@ -209,37 +213,42 @@ while true; do
     -err_detect ignore_err \
     -user_agent "$DEFAULT_USER_AGENT" \
     -i "$resolved_url" \
-    -map 0:v:0? \
-    -map 0:a:0? \
-    -vf "scale=-2:720:flags=lanczos" \
+    -filter_complex "[0:v]split=3[v480src][v360src][v180src];[v480src]scale=-2:480:flags=fast_bilinear,fps=25[v480];[v360src]scale=640:360:flags=fast_bilinear,fps=25[v360];[v180src]scale=320:180:flags=fast_bilinear,fps=20[v180];[0:a:0]aresample=async=1:first_pts=0,asplit=3[a480][a360][a180]" \
+    -map "[v480]" -map "[a480]" \
+    -map "[v360]" -map "[a360]" \
+    -map "[v180]" -map "[a180]" \
+    -dn \
+    -sn \
     -c:v libx264 \
     -preset veryfast \
     -tune zerolatency \
     -profile:v high \
     -level 4.0 \
-    -b:v 2500k \
-    -maxrate 3200k \
-    -bufsize 6400k \
+    -b:v:0 950k -maxrate:v:0 1100k -bufsize:v:0 2200k \
+    -b:v:1 700k -maxrate:v:1 850k -bufsize:v:1 1700k \
+    -b:v:2 350k -maxrate:v:2 450k -bufsize:v:2 900k \
     -max_muxing_queue_size 2048 \
     -g 60 \
     -keyint_min 60 \
     -sc_threshold 0 \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a:0 96k -b:a:1 96k -b:a:2 64k \
     -f hls \
-    -hls_time 6 \
+    -hls_time 4 \
     -hls_list_size "$HLS_LIST_SIZE" \
     -start_number "$START_NUMBER" \
-    -hls_flags delete_segments+program_date_time+independent_segments \
-    -hls_segment_filename "$OUT/seg_%06d.ts" \
-    "$OUT/index.m3u8" &
+    -hls_flags delete_segments+program_date_time+independent_segments+temp_file+omit_endlist \
+    -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:360p v:2,a:2,name:180p" \
+    -master_pl_name index.m3u8 \
+    -hls_segment_filename "$OUT/%v/seg_${RUN_ID}_%06d.ts" \
+    "$OUT/%v/index.m3u8" &
 
   ffmpeg_pid=$!
 
   last_ok_ts="$(date +%s)"
-  if [ -f "$OUT/index.m3u8" ]; then
-    last_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+  if [ -f "$OUT/480p/index.m3u8" ]; then
+    last_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
   else
     last_mtime="$last_ok_ts"
   fi
@@ -247,8 +256,8 @@ while true; do
   while kill -0 "$ffmpeg_pid" 2>/dev/null; do
     sleep 15
 
-    if [ -f "$OUT/index.m3u8" ]; then
-      current_mtime="$(stat -c %Y "$OUT/index.m3u8")"
+    if [ -f "$OUT/480p/index.m3u8" ]; then
+      current_mtime="$(stat -c %Y "$OUT/480p/index.m3u8")"
       if [ "$current_mtime" != "$last_mtime" ]; then
         last_mtime="$current_mtime"
         last_ok_ts="$(date +%s)"
@@ -259,7 +268,7 @@ while true; do
     stale_seconds=$(( now_ts - last_ok_ts ))
 
     if [ "$stale_seconds" -ge "$MAX_STALE_SECONDS" ]; then
-      echo "[ffmpeg_web16_proxy] index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
+      echo "[ffmpeg_web16_proxy] 480p/index.m3u8 lleva $stale_seconds s sin actualizarse, matando ffmpeg ($ffmpeg_pid)" >&2
       kill "$ffmpeg_pid" 2>/dev/null
       sleep 2
       break

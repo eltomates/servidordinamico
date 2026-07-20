@@ -525,6 +525,41 @@
           </p>
         </section>
 
+        <section class="card" style="margin-top: 24px">
+          <h2>HDMI5 directo (capturadora USB 5)</h2>
+          <p>
+            La quinta entrada HDMI‑USB se publica también como
+            <strong>HLS con vídeo+audio juntos</strong> servido por Apache.
+          </p>
+
+          <div class="video-wrapper">
+            <video
+              id="hdmi5-player"
+              class="stream"
+              controls
+              playsinline
+            ></video>
+          </div>
+
+          <div class="controls" style="flex-wrap: wrap; margin-top: 8px">
+            <button id="hdmi5-reload-btn" type="button">
+              Actualizar video HDMI5 (recargar segmentos)
+            </button>
+          </div>
+
+          <p class="note">
+            Si no ves ni oyes nada, comprueba que el comando ffmpeg HLS de
+            HDMI5 está en ejecución en el servidor.
+          </p>
+
+          <p class="note">
+            Para ver HDMI5 con <strong>vídeo+audio</strong> en VLC, abre esta URL
+            como medio de red:
+            <br />
+            <code class="vlc-url" data-path="/hls/hdmi5/index.m3u8"></code>
+          </p>
+        </section>
+
       
 
       <section class="card" style="margin-top: 24px">
@@ -1333,10 +1368,10 @@
 
         const hlsConfig = {
           // Más colchón de buffer para reducir cortes
-          liveSyncDuration: 6,
-          liveMaxLatencyDuration: 30,
+          liveSyncDuration: 16,
+          liveMaxLatencyDuration: 48,
           maxLiveSyncPlaybackRate: 1.0,
-          maxBufferLength: 20,
+          maxBufferLength: 30,
           maxBufferHole: 2,
           lowLatencyMode: false,
         };
@@ -2077,7 +2112,16 @@
         setupHlsPlayer(
           "hdmi1-player",
           "/hls/hdmi1/index.m3u8",
-          "/hls/hdmi1/index.m3u8"
+          "/hls/hdmi1/index.m3u8",
+          {
+            hlsOverrides: {
+              liveSyncDuration: 16,
+              liveMaxLatencyDuration: 48,
+              maxBufferLength: 45,
+              maxBufferHole: 2,
+              lowLatencyMode: false,
+            },
+          }
         );
 
         setupHlsPlayer(
@@ -2106,6 +2150,23 @@
           if (hdmi4ReloadBtn) {
             hdmi4ReloadBtn.addEventListener("click", () => {
               restartHlsPlayer("hdmi4-player");
+            });
+          }
+
+          setupHlsPlayer(
+            "hdmi5-player",
+            "/hls/hdmi5/index.m3u8",
+            "/hls/hdmi5/index.m3u8",
+            {
+              autoPlayMuted: true,
+              autoRestart: true,
+            }
+          );
+
+          const hdmi5ReloadBtn = document.getElementById("hdmi5-reload-btn");
+          if (hdmi5ReloadBtn) {
+            hdmi5ReloadBtn.addEventListener("click", () => {
+              restartHlsPlayer("hdmi5-player");
             });
           }
 

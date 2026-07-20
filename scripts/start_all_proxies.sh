@@ -61,7 +61,7 @@ fi
 
 mkdir -p "$LOG_DIR"
 
-CHANNELS=(web1 web2 web3 web4 web5 web6 web7 web8 web9 web10 web11 web12 web13 web14 web15 web16)
+CHANNELS=(web2 web3 web4 web5 web6 web7 web8 web9 web10 web12 web13 web14 web15 web16)
 
 runtime_user_for_channels() {
 	local owner
@@ -90,12 +90,16 @@ launch_channel_process() {
 	local runtime_gid
 	local runtime_home
 	local env_prefix=( )
+	local detach_prefix=( )
 
 	runtime_home="$(getent passwd "$runtime_user" | cut -d: -f6 2>/dev/null || true)"
 	if [ -z "$runtime_home" ]; then
 		runtime_home="/root"
 	fi
 	env_prefix=(env "HOME=$runtime_home" "USER=$runtime_user" "LOGNAME=$runtime_user")
+	if command -v setsid >/dev/null 2>&1; then
+		detach_prefix=(setsid)
+	fi
 
 	if [ "$(id -u)" -eq 0 ] && [ "$runtime_user" != "root" ]; then
 		if command -v setpriv >/dev/null 2>&1; then
@@ -113,15 +117,15 @@ launch_channel_process() {
 
 	if [ -n "$src_url" ]; then
 		if [ -n "$launch_prefix" ]; then
-			SRC_URL="$src_url" nohup "${env_prefix[@]}" $launch_prefix bash "$script" 8>&- > "$log_file" 2>&1 &
+			SRC_URL="$src_url" nohup "${detach_prefix[@]}" "${env_prefix[@]}" $launch_prefix bash "$script" 8>&- > "$log_file" 2>&1 &
 		else
-			SRC_URL="$src_url" nohup "${env_prefix[@]}" bash "$script" 8>&- > "$log_file" 2>&1 &
+			SRC_URL="$src_url" nohup "${detach_prefix[@]}" "${env_prefix[@]}" bash "$script" 8>&- > "$log_file" 2>&1 &
 		fi
 	else
 		if [ -n "$launch_prefix" ]; then
-			nohup "${env_prefix[@]}" $launch_prefix bash "$script" 8>&- > "$log_file" 2>&1 &
+			nohup "${detach_prefix[@]}" "${env_prefix[@]}" $launch_prefix bash "$script" 8>&- > "$log_file" 2>&1 &
 		else
-			nohup "${env_prefix[@]}" bash "$script" 8>&- > "$log_file" 2>&1 &
+			nohup "${detach_prefix[@]}" "${env_prefix[@]}" bash "$script" 8>&- > "$log_file" 2>&1 &
 		fi
 	fi
 }
@@ -221,7 +225,11 @@ restart_one_channel() {
 
 if [ -n "$CHANNEL_ONLY" ]; then
 	case "$CHANNEL_ONLY" in
-		web1|web2|web3|web4|web5|web6|web7|web8|web9|web10|web11|web12|web13|web14|web15|web16) ;;
+		web1|web11)
+			echo "[start_all_proxies] Canal $CHANNEL_ONLY deshabilitado para reducir carga."
+			exit 0
+			;;
+		web2|web3|web4|web5|web6|web7|web8|web9|web10|web12|web13|web14|web15|web16) ;;
 		*)
 			echo "[start_all_proxies] ERROR: canal invalido: $CHANNEL_ONLY" >&2
 			exit 1
@@ -237,4 +245,4 @@ for channel in "${CHANNELS[@]}"; do
 	restart_one_channel "$channel" ""
 done
 
-echo "[start_all_proxies] Proxys web1-web16 iniciados."
+echo "[start_all_proxies] Proxys web2-web16 iniciados (web1 y web11 deshabilitados)."

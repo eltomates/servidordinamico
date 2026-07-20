@@ -28,7 +28,7 @@ fi
 OUT="${OUT:-/var/www/html/hls/web14}"
 SRC_URL="${SRC_URL:-${CONFIG_SRC_URL:-https://pluto.tv/latam/live-tv/5ddd7cb2cbb9010009b4fe32}}"
 YT_FORMAT_SELECTOR="${YT_FORMAT_SELECTOR:-bv*[vcodec^=avc1][height<=720][ext=mp4]+ba[ext=mp4]/bv*[vcodec^=avc1][ext=mp4]+ba[ext=mp4]/b}"
-PLUTO_TARGET_BANDWIDTH="${PLUTO_TARGET_BANDWIDTH:-1577180}"
+PLUTO_TARGET_BANDWIDTH="${PLUTO_TARGET_BANDWIDTH:-1200000}"
 MAX_STALE_SECONDS="${MAX_STALE_SECONDS:-45}"
 WATCHDOG_INTERVAL_SECONDS="${WATCHDOG_INTERVAL_SECONDS:-15}"
 FFMPEG_USER_AGENT="${FFMPEG_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0}"
@@ -42,7 +42,7 @@ LAST_RESOLVED_FILE="${LAST_RESOLVED_FILE:-/var/www/html/logs/web14_last_resolved
 USE_LAST_RESOLVED_ON_START="${USE_LAST_RESOLVED_ON_START:-1}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-20}"
 HLS_TIME="${HLS_TIME:-4}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-30}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 HLS_DELETE_THRESHOLD="${HLS_DELETE_THRESHOLD:-2}"
 FFMPEG_REFERER="${FFMPEG_REFERER:-https://pluto.tv/}"
 
@@ -56,6 +56,19 @@ is_direct_stream_url() {
   case "$1" in
     *.m3u8*|*.mpd*) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+derive_pluto_audio_url() {
+  local video_url="$1"
+
+  case "$video_url" in
+    *cfd-v4-service-channel-stitcher*.prd.pluto.tv/v2/stitch/hls/channel/*/playlist.m3u8*)
+      printf "%s\n" "$(printf "%s" "$video_url" | sed -E "s#/([0-9]+)/playlist\.m3u8#/audio/audio/English/audio.m3u8#")"
+      ;;
+    *)
+      return 1
+      ;;
   esac
 }
 
@@ -244,24 +257,80 @@ run_ffmpeg_from_direct_url() {
     -re \
     -i "$input_url" \
     -map 0:v:0 \
-    -map 0:a:0 \
-    -vf "scale=-2:720:flags=bicubic" \
+    -map 0:a:0? \
+    -vf "scale=-2:540:flags=bicubic" \
     -c:v libx264 \
     -preset superfast \
     -tune zerolatency \
     -profile:v high \
     -level 4.0 \
     -fps_mode:v cfr \
-    -b:v 2500k \
-    -maxrate 3200k \
-    -bufsize 6400k \
+    -b:v 1200k \
+    -maxrate 1400k \
+    -bufsize 2800k \
     -max_muxing_queue_size 2048 \
     -g 60 \
     -keyint_min 60 \
     -sc_threshold 0 \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
+    -af "aresample=async=1:first_pts=0" \
+    -f hls \
+    -hls_time "$HLS_TIME" \
+    -hls_list_size "$HLS_LIST_SIZE" \
+    -hls_delete_threshold "$HLS_DELETE_THRESHOLD" \
+    -start_number "$START_NUMBER" \
+    -hls_flags delete_segments+independent_segments+temp_file+omit_endlist \
+    -hls_segment_filename "$OUT/seg_%06d.ts" \
+    "$OUT/index.m3u8" &
+}
+
+run_ffmpeg_from_dual_url() {
+  local video_url="$1"
+  local audio_url="$2"
+
+  echo "[ffmpeg_web14_proxy] Usando video + audio Pluto: $video_url | $audio_url" >&2
+
+  ffmpeg \
+    -loglevel info \
+    -extension_picky 0 \
+    -allowed_extensions ALL \
+    -allowed_segment_extensions ALL \
+    -rw_timeout 15000000 \
+    -fflags +discardcorrupt+genpts \
+    -err_detect ignore_err \
+    -reconnect 1 \
+    -reconnect_streamed 1 \
+    -reconnect_on_network_error 1 \
+    -reconnect_on_http_error 4xx,5xx \
+    -reconnect_delay_max 10 \
+    -http_persistent 0 \
+    -referer "$FFMPEG_REFERER" \
+    -user_agent "$FFMPEG_USER_AGENT" \
+    -re \
+    -i "$video_url" \
+    -thread_queue_size 1024 \
+    -i "$audio_url" \
+    -map 0:v:0 \
+    -map 1:a:0 \
+    -vf "scale=-2:540:flags=bicubic" \
+    -c:v libx264 \
+    -preset superfast \
+    -tune zerolatency \
+    -profile:v high \
+    -level 4.0 \
+    -fps_mode:v cfr \
+    -b:v 1200k \
+    -maxrate 1400k \
+    -bufsize 2800k \
+    -max_muxing_queue_size 2048 \
+    -g 60 \
+    -keyint_min 60 \
+    -sc_threshold 0 \
+    -c:a aac \
+    -ac 2 \
+    -b:a 96k \
     -af "aresample=async=1:first_pts=0" \
     -f hls \
     -hls_time "$HLS_TIME" \
@@ -304,7 +373,7 @@ run_ffmpeg_from_ytdlp() {
       -keyint_min 40 \
       -c:a aac \
       -ac 2 \
-      -b:a 128k \
+      -b:a 96k \
       -f hls \
       -hls_time 4 \
       -hls_list_size "$HLS_LIST_SIZE" \
@@ -340,9 +409,13 @@ while true; do
     resolve_rc=0
   fi
 
-  if [ "$resolve_rc" -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL" ]; then
+  if [ "$resolve_rc" -eq 0 ] && [ -n "$RESOLVED_SRC_URL" ] && is_direct_stream_url "$RESOLVED_SRC_URL"; then
     printf '%s\n' "$RESOLVED_SRC_URL" >"$LAST_RESOLVED_FILE" 2>/dev/null || true
-    run_ffmpeg_from_direct_url "$RESOLVED_SRC_URL"
+    if [[ "$SRC_URL" == https://pluto.tv/*/live-tv/* ]] && PLUTO_AUDIO_URL="$(derive_pluto_audio_url "$RESOLVED_SRC_URL" 2>/dev/null)" && [ -n "$PLUTO_AUDIO_URL" ]; then
+      run_ffmpeg_from_dual_url "$RESOLVED_SRC_URL" "$PLUTO_AUDIO_URL"
+    else
+      run_ffmpeg_from_direct_url "$RESOLVED_SRC_URL"
+    fi
     ffmpeg_pid=$!
   else
     echo "[ffmpeg_web14_proxy] No se pudo resolver una URL reproducible para $SRC_URL" >&2

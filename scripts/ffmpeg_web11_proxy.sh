@@ -14,8 +14,8 @@ acquire_single_instance_lock "${BASH_SOURCE[0]}" || exit 0
 OUT="${OUT:-/var/www/html/hls/web11}"
 SRC_URL="${SRC_URL:-https://d3s7x6kmqcnb6b.cloudfront.net/d/distro001a/G7RPZJDZ6V3CRIAWTNFU/hls3/now,-1m/m.m3u8?ads.vf=vc24NGfvvqe}"
 KEEP_SEGMENTS="${KEEP_SEGMENTS:-36}"
-HLS_TIME="${HLS_TIME:-6}"
-HLS_LIST_SIZE="${HLS_LIST_SIZE:-15}"
+HLS_TIME="${HLS_TIME:-4}"
+HLS_LIST_SIZE="${HLS_LIST_SIZE:-10}"
 HLS_DELETE_THRESHOLD="${HLS_DELETE_THRESHOLD:-10}"
 FPS="${FPS:-25}"
 GOP="${GOP:-150}"
@@ -63,7 +63,7 @@ while true; do
     -force_key_frames "expr:gte(t,n_forced*$HLS_TIME)" \
     -c:a aac \
     -ac 2 \
-    -b:a 128k \
+    -b:a 96k \
     -f hls \
     -hls_time "$HLS_TIME" \
     -hls_list_size "$HLS_LIST_SIZE" \

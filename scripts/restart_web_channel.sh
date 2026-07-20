@@ -39,14 +39,22 @@ run_orchestrator_restart() {
 
 get_index_mtime() {
   local channel="$1"
-  local index_file="$HLS_DIR/$channel/index.m3u8"
+  local channel_dir="$HLS_DIR/$channel"
+  local latest_mtime
 
-  if [ ! -f "$index_file" ]; then
+  if [ ! -d "$channel_dir" ]; then
     echo 0
     return
   fi
 
-  stat -c %Y "$index_file" 2>/dev/null || echo 0
+  latest_mtime="$(find "$channel_dir" -maxdepth 2 -type f -name "index.m3u8" -printf "%T@\n" 2>/dev/null | awk 'BEGIN { max = 0 } $1 > max { max = $1 } END { if (max > 0) printf "%.0f\n", max; else print 0 }')"
+
+  if [ -n "$latest_mtime" ] && [ "$latest_mtime" -gt 0 ] 2>/dev/null; then
+    echo "$latest_mtime"
+    return
+  fi
+
+  echo 0
 }
 
 channel_is_stale() {
@@ -208,7 +216,11 @@ if [ -z "$channel" ]; then
 fi
 
 case "$channel" in
-  web1|web2|web3|web4|web5|web6|web7|web8|web9|web10|web11|web12|web13|web14|web15|web16) ;;
+  web1|web11)
+    echo "OK: $channel está deshabilitado para reducir carga."
+    exit 0
+    ;;
+  web2|web3|web4|web5|web6|web7|web8|web9|web10|web12|web13|web14|web15|web16) ;;
   *)
     echo "ERROR: Canal inválido: $channel"
     exit 0
